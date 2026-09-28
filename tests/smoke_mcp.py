@@ -72,6 +72,36 @@ async def main() -> int:
             rr = await s.read_resource("negotiation://parameters/default")
             print("  ", rr.contents[0].text[:90].replace("\n", " "), "...")
 
+            print("\n--- price intelligence: brief, no offer ---")
+            out = await s.call_tool("negotiation_brief", {"params": {
+                "sku": "IVC22-PRI", "vendor": "Prima", "response_format": "json"}})
+            d = json.loads(out.content[0].text)
+            t = d["targets"]
+            print("  ", d["headline"][:150], "...")
+            assert d["is_sample"], "sample data must be flagged"
+            assert all(t["target_price"] < r["price"] for r in t["references"]), "target must beat every reference"
+            assert "PROPOSED" in t["walk_away_status"]
+
+            print("\n--- price intelligence: brief with offer and sign-off ---")
+            out = await s.call_tool("negotiation_brief", {"params": {
+                "sku": "IVC22-PRI", "vendor": "Prima", "reservation_approved_by": "Heldra",
+                "parameters": {"rebate_breakage_rate": 0.10}, "response_format": "json",
+                "offer": {"vendor": "Prima Alkes", "sku_group": "IV cannula 22G",
+                          "quoted_annual_quantity": 1050, "list_price_per_quoted_unit": 700000,
+                          "clinical_units_per_quoted_unit": 50, "on_invoice_discount": 0.10}}})
+            d = json.loads(out.content[0].text)
+            print(f"   verdict={d['verdict']['verdict']}  packages={[p['name'] for p in d['counter_offer']['packages']]}")
+            assert all(p["meets_target"] for p in d["counter_offer"]["packages"])
+
+            print("\n--- savings, alerts, lookup (markdown) ---")
+            for tool, args in (("negotiation_savings_opportunities", {"top_n": 3}),
+                               ("negotiation_alerts", {"limit": 3}),
+                               ("negotiation_price_lookup", {"search": "ceftriaxone"})):
+                txt = (await s.call_tool(tool, {"params": args})).content[0].text
+                assert not txt.startswith("Error"), txt
+                assert "SAMPLE DATA" in txt
+                print(f"   {tool}: {txt.splitlines()[2]}")
+
     print("\nSMOKE TEST PASSED")
     return 0
 

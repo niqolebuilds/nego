@@ -1,0 +1,22 @@
+sku,sku_name,equivalence_group,clinical_unit,single_source
+SYR3-MED,Syringe 3 mL luer lock (Medisindo),Syringe 3 mL,piece,false
+SYR3-PRI,Syringe 3 mL luer lock (Prima),Syringe 3 mL,piece,false
+SYR3-GLO,Syringe 3 mL luer lock (Global),Syringe 3 mL,piece,false
+IVC22-PRI,IV cannula 22G (Prima),IV cannula 22G,piece,false
+IVC22-SEH,IV cannula 22G (Sehat),IV cannula 22G,piece,false
+IVC22-MED,IV cannula 22G (Medisindo),IV cannula 22G,piece,false
+GLV-M-NUS,Nitrile exam gloves M (Nusantara),Nitrile gloves M,piece,false
+GLV-M-MED,Nitrile exam gloves M (Medisindo),Nitrile gloves M,piece,false
+TNI-GLO,Troponin I reagent (Global),Troponin I reagent,test,false
+TNI-SEH,Troponin I reagent (Sehat),Troponin I reagent,test,false
+HBA1C-GLO,HbA1c reagent (Global),HbA1c reagent,test,false
+HBA1C-SEH,HbA1c reagent (Sehat),HbA1c reagent,test,false
+HBA1C-PRI,HbA1c reagent (Prima),HbA1c reagent,test,false
+CEF1G-NUS,Ceftriaxone 1 g injection (Nusantara),Ceftriaxone 1 g inj,piece,false
+CEF1G-MED,Ceftriaxone 1 g injection (Medisindo),Ceftriaxone 1 g inj,piece,false
+CEF1G-SEH,Ceftriaxone 1 g injection (Sehat),Ceftriaxone 1 g inj,piece,false
+PCT1G-NUS,Paracetamol 1 g infusion (Nusantara),Paracetamol 1 g infusion,piece,false
+PCT1G-PRI,Paracetamol 1 g infusion (Prima),Paracetamol 1 g infusion,piece,false
+SUT20-SUR,Absorbable suture 2-0 (Surgika),Absorbable suture 2-0,piece,false
+SUT20-MED,Absorbable suture 2-0 (Medisindo),Absorbable suture 2-0,piece,false
+DES-SUR,Drug-eluting coronary stent (Surgika),Drug-eluting stent,piece,true

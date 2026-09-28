@@ -74,4 +74,40 @@
     <answer>yes</answer>
   </qa_pair>
 
+  <!--
+  Price-intelligence questions. These run against the bundled synthetic price book
+  (data/sample, regenerate with scripts/generate_sample_data.py), evaluated at its
+  latest date, 2026-08-15, with default margins (beat 1%, anchor 5%).
+  -->
+
+  <qa_pair>
+    <question>Using the price book, what target net price per clinical unit should Siloam aim for on IV cannula 22G (Prima) from Prima Alkes? Round to two decimal places.</question>
+    <answer>9,905.39</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>For that same IV cannula negotiation, which vendor's price sets the lowest reference that the target has to beat?</question>
+    <answer>Sehat Medika</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Which SKU in the price book has the largest annual savings opportunity against the best available price?</question>
+    <answer>Drug-eluting coronary stent (Surgika)</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Which vendor has raised a price well above the inflation index over the past year, triggering a price-creep alert?</question>
+    <answer>Prima Alkes</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Which Siloam site pays the most per unit for Troponin I reagent (Sehat) over the last 12 months?</question>
+    <answer>Site Makassar</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Medisindo offers Ceftriaxone 1 g injection at 13,000 per vial. Does that beat every historical, internal and competitor reference? Answer with the engine's status.</question>
+    <answer>BEATS_ALL</answer>
+  </qa_pair>
+
 </evaluation>

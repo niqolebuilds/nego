@@ -6,36 +6,49 @@ does not have: Principal Contract Negotiation steps 18 and 20, and Consumables
 Seasonal Price Increase step 8, all branch on thresholds that the catalogue's own
 gap lists say do not exist.
 
-Every tool is a pure calculation — no external API, no database, no writes. Data
-arrives as parameters, which is deliberate: nine data elements in the register are
-still blocking, and the engine refuses to invent them. A tool that needs a missing
-element fails with the element's register ID and its owner rather than substituting
-a plausible default.
+Every tool is read-only — no external API, no writes. The calculation tools take
+their data as parameters. The price-intelligence tools also read the local price book
+(CSV exports in ``NEGOTIATION_DATA_DIR``) and never write to it. Nine data elements in
+the register are still blocking, and the engine refuses to invent them. A tool that
+needs a missing element fails with the element's register ID and its owner rather
+than substituting a plausible default.
 
 Transport: stdio. Run with ``python -m negotiation_mcp.server``.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal, Optional
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from . import engine as E
+from . import intelligence as I
 from .formatting import (
     ResponseFormat,
+    alerts_markdown,
+    beat_markdown,
+    benchmark_markdown,
     binding_markdown,
+    brief_markdown,
     comparison_markdown,
+    counter_markdown,
     enuc_markdown,
+    lookup_markdown,
     realization_markdown,
+    savings_markdown,
+    targets_markdown,
     to_json,
+    vendor_spend_markdown,
     verdict_markdown,
 )
+from .pricebook import SAMPLE_BANNER, PriceBook, cached_book
 
 mcp = FastMCP("negotiation_mcp")
 
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 
 
 # ==========================================================================
@@ -811,9 +824,13 @@ async def negotiation_data_readiness(params: ReadinessInput) -> str:
 
     Returns:
         str: markdown list, or JSON: {"blocking": [{"key": str, "register": str}],
-             "count": int, "note": str}
+             "count": int, "note": str, "price_book": {...status, or "error"}}
     """
     items = [{"key": k, "register": v} for k, v in E.BLOCKING_DATA_ELEMENTS.items()]
+    try:
+        price_book: dict = get_book().status()
+    except Exception as e:  # noqa: BLE001
+        price_book = {"error": str(e)}
     payload = {
         "blocking": items,
         "count": len(items),
@@ -821,13 +838,336 @@ async def negotiation_data_readiness(params: ReadinessInput) -> str:
             "These are the blocking elements the engine touches directly. The full "
             "register holds 32 elements, 9 of them blocking."
         ),
+        "price_book": price_book,
     }
+    if "error" in price_book:
+        book_lines = [f"- Not loaded: {price_book['error']}"]
+    else:
+        book_lines = [f"- `{k}`: {v}" for k, v in price_book.items()]
+        if price_book["is_sample"]:
+            book_lines.insert(0, f"- **{SAMPLE_BANNER}**")
     md = "\n".join(
         ["# Blocking data elements", ""]
         + [f"- `{i['key']}` — {i['register']}" for i in items]
-        + ["", payload["note"]]
+        + ["", payload["note"], "", "## Price book", ""]
+        + book_lines
     )
     return _respond(params.response_format, md, payload)
+
+
+# ==========================================================================
+# Price intelligence — reads the price book, never writes it
+# ==========================================================================
+
+def get_book() -> PriceBook:
+    return cached_book()
+
+
+READ_ONLY = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+AS_OF_FIELD = Field(
+    default=None,
+    description="Date to evaluate at (YYYY-MM-DD). Defaults to the latest date in the price book",
+)
+
+
+class LookupInput(StrictModel):
+    search: Optional[str] = Field(
+        default=None, description="SKU code or part of the product name, e.g. 'ceftriaxone' or 'IVC22'", max_length=200
+    )
+    vendor: Optional[str] = Field(default=None, description="Vendor name or fragment", max_length=200)
+    hospital: Optional[str] = Field(default=None, description="Siloam site name or fragment", max_length=200)
+    since: Optional[date] = Field(default=None, description="Only prices on or after this date")
+    sources: Optional[list[Literal["po", "contract", "quote"]]] = Field(
+        default=None, description="Restrict to purchase orders, contracts and/or quotes"
+    )
+    limit: int = Field(default=50, ge=1, le=500)
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_price_lookup", annotations={"title": "Look Up Prices Paid and Quoted", **READ_ONLY})
+async def negotiation_price_lookup(params: LookupInput) -> str:
+    """What has Siloam paid or been quoted for a product, by whom and where?
+
+    Searches the price book and summarises each SKU/vendor pair: latest price per
+    pack, per clinical unit, best price seen, and which sites buy it. Any vendor, any
+    SKU — leave the search empty and give a vendor to list everything that vendor sells.
+
+    Returns:
+        str: markdown table, or JSON {"matches": int, "rows": [...], "truncated": bool}
+
+    Examples:
+        - "What do we pay for ceftriaxone?" -> search="ceftriaxone"
+        - "Everything we buy from Medisindo" -> vendor="Medisindo"
+    """
+    try:
+        res = I.lookup(get_book(), params.search, params.vendor, params.hospital, params.since,
+                       params.sources, params.limit)
+        return _respond(params.response_format, lookup_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class BenchmarkInput(StrictModel):
+    sku: str = Field(..., description="SKU code or a unique part of the product name", min_length=1, max_length=200)
+    lookback_months: int = Field(default=24, ge=3, le=120, description="How far back vendor bests reach")
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_benchmark", annotations={"title": "Benchmark One SKU", **READ_ONLY})
+async def negotiation_benchmark(params: BenchmarkInput) -> str:
+    """Everything known about one SKU's price: best ever, best today, by vendor, by site.
+
+    Includes internal price variance (what sites pay above the best Siloam site) and
+    the equivalent SKUs from competing vendors. Prices are per clinical unit and,
+    when a price index is loaded, in today's money.
+
+    Examples:
+        - "How does our troponin price compare?" -> sku="troponin" (if unique) or a code
+        - "Which site pays most for IV cannulas?" -> read by_hospital
+    """
+    try:
+        res = I.benchmark(get_book(), params.sku, params.as_of, params.lookback_months)
+        return _respond(params.response_format, benchmark_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class TargetsInput(StrictModel):
+    sku: str = Field(..., description="SKU code or unique product-name fragment", min_length=1, max_length=200)
+    vendor: str = Field(..., description="Vendor being negotiated with", min_length=1, max_length=200)
+    beat_margin: float = Field(
+        default=0.01, ge=0, lt=0.5, description="How far below the best reference the target sits (0.01 = 1%)"
+    )
+    anchor_margin: float = Field(
+        default=0.05, ge=0, lt=0.5, description="How far below the target to open (0.05 = 5%)"
+    )
+    annual_volume: Optional[float] = Field(
+        default=None, gt=0, description="Clinical units a year. Defaults to the group's last 12 months"
+    )
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_recommend_targets", annotations={"title": "Recommend Target, Opening Ask, Walk-Away", **READ_ONLY})
+async def negotiation_recommend_targets(params: TargetsInput) -> str:
+    """The price to aim for: beats every historical, internal and competitor price.
+
+    Builds the evidence ladder (best ever, best Siloam site today, the vendor's own
+    best, the best competing vendor on an equivalent SKU), sets the target
+    beat_margin below the lowest rung and the opening ask below that. The walk-away
+    is PROPOSED only (D-21): it needs sign-off by someone other than the negotiator.
+
+    Examples:
+        - "What price should we get for IV cannula 22G from Prima?"
+        - "What's our opening ask for the stent renewal?"
+    """
+    try:
+        res = I.recommend_targets(get_book(), params.sku, params.vendor, params.as_of, params.beat_margin,
+                                  params.anchor_margin, annual_volume=params.annual_volume)
+        return _respond(params.response_format, targets_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class BeatCheckInput(StrictModel):
+    sku: str = Field(..., description="SKU code or unique product-name fragment", min_length=1, max_length=200)
+    vendor: Optional[str] = Field(default=None, description="Vendor making the offer, adds its own history", max_length=200)
+    offered_price_per_clinical_unit: Optional[float] = Field(
+        default=None, gt=0, description="Net invoice price per clinical unit. Give this OR offer"
+    )
+    offer: Optional[OfferInput] = Field(
+        default=None, description="Full offer; its net invoice price per clinical unit is checked"
+    )
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_beat_check", annotations={"title": "Does This Price Beat Everything?", **READ_ONLY})
+async def negotiation_beat_check(params: BeatCheckInput) -> str:
+    """Check a quoted price against every reference: history, Siloam sites and competitors.
+
+    Returns BEATS_ALL, BEATS_SOME or BEATS_NONE, the gap to each reference, and the
+    price that would beat all of them. Quote in packs? Pass the full offer so the
+    pack size is normalised.
+
+    Examples:
+        - "Prima quoted 520,000 a box of 50 — is that good?" -> offer with clinical_units_per_quoted_unit=50
+    """
+    try:
+        if (params.offer is None) == (params.offered_price_per_clinical_unit is None):
+            raise E.EngineError("Give exactly one of offered_price_per_clinical_unit or offer")
+        price = (params.offer.to_engine().invoice_price_per_clinical_unit if params.offer
+                 else params.offered_price_per_clinical_unit)
+        vendor = params.vendor or (params.offer.vendor if params.offer else None)
+        res = I.beat_check(get_book(), params.sku, price, vendor, params.as_of)
+        return _respond(params.response_format, beat_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class CounterInput(StrictModel):
+    offer: OfferInput = Field(..., description="The vendor's current offer")
+    target_enuc: Optional[float] = Field(default=None, gt=0, description="Target ENUC per usable unit")
+    target_price_per_clinical_unit: Optional[float] = Field(
+        default=None, gt=0,
+        description="Target net invoice price per clinical unit (e.g. from negotiation_recommend_targets); "
+                    "translated to ENUC on this offer's other terms",
+    )
+    max_terms_days: int = Field(default=90, ge=0, le=365, description="Longest payment terms you'd accept")
+    max_free_goods_ratio: float = Field(default=0.25, ge=0, le=2, description="Most bonus stock you can use before expiry")
+    parameters: ParametersInput = Field(default_factory=ParametersInput)
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_counter_offer", annotations={"title": "Build the Counter-Offer", **READ_ONLY})
+async def negotiation_counter_offer(params: CounterInput) -> str:
+    """How much of each lever closes the gap to target, alone and as packages.
+
+    Solves discount, payment terms and bonus stock one at a time through the ENUC
+    kernel, then builds packages: rebate-to-invoice conversion first (cheap for the
+    vendor, valuable to Siloam), terms, bonus stock, then price only.
+
+    Error Handling:
+        - Give exactly one of target_enuc or target_price_per_clinical_unit.
+        - Rebates need rebate_breakage_rate (D-18).
+    """
+    try:
+        if (params.target_enuc is None) == (params.target_price_per_clinical_unit is None):
+            raise E.EngineError("Give exactly one of target_enuc or target_price_per_clinical_unit")
+        offer, p = params.offer.to_engine(), params.parameters.to_engine()
+        target = params.target_enuc or I.enuc_at_invoice_price(offer, p, params.target_price_per_clinical_unit)
+        res = I.counter_offer(offer, target, p, params.max_terms_days, params.max_free_goods_ratio)
+        return _respond(params.response_format, counter_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class BriefInput(StrictModel):
+    sku: str = Field(..., description="SKU code or unique product-name fragment", min_length=1, max_length=200)
+    vendor: str = Field(..., description="Vendor being negotiated with", min_length=1, max_length=200)
+    offer: Optional[OfferInput] = Field(
+        default=None, description="The vendor's current offer, if there is one. Enables counter-offer and verdict"
+    )
+    parameters: ParametersInput = Field(default_factory=ParametersInput)
+    beat_margin: float = Field(default=0.01, ge=0, lt=0.5)
+    anchor_margin: float = Field(default=0.05, ge=0, lt=0.5)
+    reservation_approved_by: Optional[str] = Field(
+        default=None, max_length=200,
+        description="Name of the person (not the negotiator) who signed off the proposed walk-away (D-21). "
+                    "Without it no ACCEPT/PUSH/WALK verdict is given",
+    )
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_brief", annotations={"title": "Negotiation Brief — Best Achievable Price", **READ_ONLY})
+async def negotiation_brief(params: BriefInput) -> str:
+    """One call answers "what's the best price we can get for X from vendor Y?".
+
+    Combines benchmark, target / opening ask / proposed walk-away, a beat-check of
+    the current offer (or today's price), the counter-offer levers and — once the
+    walk-away is signed off — the ACCEPT / PUSH / WALK verdict.
+
+    Use this first for any price question about a specific SKU and vendor.
+
+    Examples:
+        - "Best price for troponin from Global Diagnostika?" -> sku, vendor
+        - "Sehat offered 880,000 per box of 100 cannulas, 10% off, 30 days. Counter?" -> add offer
+    """
+    try:
+        offer = params.offer.to_engine() if params.offer else None
+        res = I.negotiation_brief(get_book(), params.sku, params.vendor, params.parameters.to_engine(), offer,
+                                  params.as_of, params.beat_margin, params.anchor_margin,
+                                  params.reservation_approved_by)
+        return _respond(params.response_format, brief_markdown(res), res)
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class PortfolioInput(StrictModel):
+    top_n: int = Field(default=10, ge=1, le=500, description="How many SKUs to return")
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_savings_opportunities", annotations={"title": "Where to Negotiate First", **READ_ONLY})
+async def negotiation_savings_opportunities(params: PortfolioInput) -> str:
+    """Rank SKUs by spend above the best available price (best site or best equivalent).
+
+    Examples:
+        - "Where are we overpaying the most?"
+        - "Top 20 renegotiation targets this quarter" -> top_n=20
+    """
+    try:
+        book = get_book()
+        rows = I.savings_opportunities(book, params.as_of, params.top_n)
+        return _respond(params.response_format, savings_markdown(rows, book.is_sample, book.currency),
+                        {"is_sample": book.is_sample, "rows": rows})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class AlertsInput(StrictModel):
+    parameters: ParametersInput = Field(
+        default_factory=ParametersInput, description="Needed for rebate alerts (rebate_breakage_rate, D-18)"
+    )
+    creep_threshold: float = Field(default=0.03, ge=0, le=1, description="Price rise above the index that triggers an alert")
+    variance_threshold: float = Field(default=0.05, ge=0, le=1, description="Site premium over the best site that triggers an alert")
+    renewal_days: int = Field(default=120, ge=1, le=730, description="Look-ahead window for contract renewals")
+    severity: Optional[Literal["high", "medium", "low"]] = Field(default=None, description="Only this severity")
+    limit: int = Field(default=30, ge=1, le=500)
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_alerts", annotations={"title": "Savings Alerts", **READ_ONLY})
+async def negotiation_alerts(params: AlertsInput) -> str:
+    """Price creep, sites paying above the group's best, quotes above history,
+    contracts up for renewal and rebate tiers at risk — ranked by severity and value.
+
+    Examples:
+        - "Anything I should act on this week?"
+        - "Which contracts renew in the next 60 days?" -> renewal_days=60
+    """
+    try:
+        book = get_book()
+        rows = I.alerts(book, params.as_of, params.parameters.to_engine(), params.creep_threshold,
+                        params.variance_threshold, params.renewal_days)
+        if params.severity:
+            rows = [a for a in rows if a["severity"] == params.severity]
+        rows = rows[: params.limit]
+        return _respond(params.response_format, alerts_markdown(rows, book.is_sample, book.currency),
+                        {"is_sample": book.is_sample, "count": len(rows), "alerts": rows})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class VendorSpendInput(StrictModel):
+    as_of: Optional[date] = AS_OF_FIELD
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_vendor_spend", annotations={"title": "Spend by Vendor", **READ_ONLY})
+async def negotiation_vendor_spend(params: VendorSpendInput) -> str:
+    """Spend, share of wallet and growth by vendor over the last 12 months.
+
+    Examples:
+        - "Who are our biggest suppliers?" / "How much do we spend with Sehat Medika?"
+    """
+    try:
+        book = get_book()
+        rows = I.vendor_spend(book, params.as_of)
+        return _respond(params.response_format, vendor_spend_markdown(rows, book.is_sample, book.currency),
+                        {"is_sample": book.is_sample, "rows": rows})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
 
 
 # ==========================================================================
