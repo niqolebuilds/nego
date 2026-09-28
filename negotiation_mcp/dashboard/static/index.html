@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Negotiation Intelligence</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232a78d6%22/%3E%3Cpath d=%22M3 11l3-3 2 2 5-5%22 stroke=%22white%22 stroke-width=%221.8%22 fill=%22none%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Negotiation Intelligence</h1>
+    <span class="asof" id="asof"></span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <a href="#overview" data-tab="overview">Overview</a>
+    <a href="#sku" data-tab="sku">SKU explorer</a>
+    <a href="#vendors" data-tab="vendors">Vendors</a>
+    <a href="#brief" data-tab="brief">Negotiation brief</a>
+    <a href="#alerts" data-tab="alerts">Alerts</a>
+  </nav>
+</header>
+<div id="banner" class="banner" hidden></div>
+
+<main>
+  <!-- Overview -->
+  <section id="page-overview" class="page">
+    <div class="tiles" id="kpis"></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Where to negotiate first</h2>
+        <p class="sub">SKUs ranked by 12-month spend above the best available price (the best site or the best equivalent product)</p>
+        <div class="table-wrap"><table id="opps"></table></div>
+      </div>
+      <div class="card">
+        <h2>Spend by vendor, last 12 months</h2>
+        <p class="sub">Share of wallet and change against the prior year</p>
+        <div id="vendor-bars"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Top alerts</h2>
+      <ul class="alerts" id="overview-alerts"></ul>
+    </div>
+  </section>
+
+  <!-- SKU explorer -->
+  <section id="page-sku" class="page" hidden>
+    <div class="filters">
+      <label>SKU <select id="sku-select"></select></label>
+      <div class="seg" role="group" aria-label="Split by">
+        <button data-by="vendor" class="on">By vendor</button>
+        <button data-by="hospital">By site</button>
+      </div>
+      <button class="link" id="sku-to-brief">Open brief for this SKU →</button>
+    </div>
+    <div class="tiles" id="sku-tiles"></div>
+    <div class="card">
+      <h2 id="trend-title">Price per clinical unit, monthly</h2>
+      <p class="sub">Volume-weighted net invoice price. Dashed lines: best Siloam site and best equivalent product, last 12 months (today's money)</p>
+      <div id="trend"></div>
+      <details><summary>Table view</summary><div class="table-wrap"><table id="trend-table"></table></div></details>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Price by Siloam site, last 12 months</h2>
+        <p class="sub">Premium over the best site — the internal price variance</p>
+        <div id="site-bars"></div>
+      </div>
+      <div class="card">
+        <h2>Vendors and equivalent products</h2>
+        <div class="table-wrap"><table id="sku-vendors"></table></div>
+        <div class="table-wrap"><table id="sku-group"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vendors -->
+  <section id="page-vendors" class="page" hidden>
+    <div class="card">
+      <h2>Vendor scorecard</h2>
+      <p class="sub">Each vendor's 12-month price against the best price in the product's equivalence group</p>
+      <div class="filters"><label>Vendor <select id="vendor-select"><option value="">All vendors</option></select></label></div>
+      <div class="table-wrap"><table id="vendor-table"></table></div>
+    </div>
+  </section>
+
+  <!-- Brief -->
+  <section id="page-brief" class="page" hidden>
+    <form class="filters" id="brief-form">
+      <label>SKU <select id="brief-sku"></select></label>
+      <label>Vendor <select id="brief-vendor"></select></label>
+      <label>Walk-away approved by <input id="brief-approver" placeholder="name (D-21), optional" autocomplete="off"></label>
+      <button type="submit" class="primary">Build brief</button>
+      <button type="button" class="link" onclick="window.print()">Print</button>
+    </form>
+    <div id="brief-out"></div>
+  </section>
+
+  <!-- Alerts -->
+  <section id="page-alerts" class="page" hidden>
+    <div class="filters">
+      <div class="seg" role="group" aria-label="Severity" id="sev-filter">
+        <button data-sev="" class="on">All</button>
+        <button data-sev="high">High</button>
+        <button data-sev="medium">Medium</button>
+        <button data-sev="low">Low</button>
+      </div>
+    </div>
+    <div class="card"><ul class="alerts" id="alerts-list"></ul></div>
+  </section>
+</main>
+
+<div id="tooltip" class="tooltip" role="status" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

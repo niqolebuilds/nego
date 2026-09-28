@@ -3,7 +3,7 @@ name = "negotiation-mcp"
 version = "0.1.0"
 description = "Negotiation decision engine for Siloam healthcare procurement, exposed as an MCP server"
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.2.0,<2", "pydantic>=2.0"]
+dependencies = ["mcp>=1.2.0,<2", "pydantic>=2.0", "starlette", "uvicorn"]
 
 [project.scripts]
 negotiation-mcp = "negotiation_mcp.server:main"

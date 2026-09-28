@@ -1,0 +1,47 @@
+# Price-intelligence stack: warehouse builder, built-in dashboard, and Metabase.
+#
+#   cd deploy && docker compose up
+#
+#   Dashboard  http://localhost:8080   (read-only, built in)
+#   Metabase   http://localhost:3000   (add database: SQLite, path /warehouse/warehouse.db)
+#
+# To use a real export instead of the synthetic sample, put the CSVs in ../data/live
+# and set NEGOTIATION_DATA_DIR=/app/data/live below.
+
+x-app: &app
+  build: ..
+  environment:
+    NEGOTIATION_DATA_DIR: /app/data/sample
+  volumes:
+    - ../data:/app/data
+    - warehouse:/warehouse
+
+services:
+  warehouse:
+    <<: *app
+    command: ["python", "scripts/build_warehouse.py", "--db", "/warehouse/warehouse.db", "--breakage", "0.10"]
+
+  dashboard:
+    <<: *app
+    command: ["python", "-m", "negotiation_mcp.dashboard", "--host", "0.0.0.0", "--port", "8080", "--breakage", "0.10"]
+    ports: ["8080:8080"]
+    depends_on:
+      warehouse:
+        condition: service_completed_successfully
+
+  metabase:
+    # Official image, used unmodified. Pin a version you have tested before production use.
+    image: metabase/metabase:latest
+    ports: ["3000:3000"]
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - warehouse:/warehouse
+      - metabase-data:/metabase-data
+    depends_on:
+      warehouse:
+        condition: service_completed_successfully
+
+volumes:
+  warehouse:
+  metabase-data:
