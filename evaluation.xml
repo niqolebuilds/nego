@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+  <!--
+  Shared scenario used by these questions unless a question states otherwise.
+
+  Parameters: wacc 0.12, baseline_payment_days 30, contract_years 3,
+  rebate_breakage_rate 0.10, rebate_collection_lag_months 6,
+  tax_efficiency_off_invoice 0.88, currency IDR.
+
+  Three offers, SKU group "Test X", 60,000 clinical units a year each:
+
+  Vendor A - list 78,000, on-invoice discount 10%, terms 45 days, wastage 1%,
+    instrument capex paid 2,400,000,000, service 180,000,000, logistics 25,000,000,
+    retro rebate tiers: 50,000@1.0%/p96, 58,000@2.0%/p62, 66,000@3.0%/p18, 75,000@4.0%/p3
+
+  Vendor B - list 108,000, on-invoice discount 5%, terms 30 days, wastage 1%,
+    instrument placed free worth 2,400,000,000, logistics 60,000,000,
+    sponsorship 400,000,000, incremental rebate tiers:
+    50,000@1.5%/p95, 60,000@3.0%/p48, 70,000@4.5%/p12, 80,000@6.0%/p2
+
+  Vendor C - list 88,000, on-invoice discount 8%, free goods ratio 5%, terms 60 days,
+    wastage 1.5%, instrument placed free worth 1,200,000,000, service 90,000,000,
+    logistics 35,000,000, switching cost 180,000,000, sponsorship 150,000,000,
+    retro rebate tiers: 55,000@1.5%/p92, 62,000@2.5%/p40, 70,000@3.5%/p10, 78,000@4.5%/p2
+  -->
+
+  <qa_pair>
+    <question>Using the shared three-vendor scenario, which vendor has the lowest Effective Net Unit Cost on the award basis?</question>
+    <answer>Vendor C</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In the shared scenario, Vendor B places an analyser worth 2,400,000,000 free of charge while Vendor A requires the hospital to buy the same instrument outright. Once the placement and the reagent pricing are both accounted for, which of the two has the lower Effective Net Unit Cost on Ledger A?</question>
+    <answer>Vendor A</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In the shared scenario, Vendor B offers a headline top-tier rebate of 6%. After probability weighting, breakage, off-invoice tax treatment and the collection lag, what is the effective net rebate rate, rounded to one decimal place as a percentage?</question>
+    <answer>1.4%</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In the shared scenario, does including sponsorship in the comparison change any vendor's rank relative to the award basis? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>For the shared scenario, what is the annual rupiah value of choosing the best offer over the worst on the award basis, rounded to the nearest million?</question>
+    <answer>1,059,685,525</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>With a WACC of 12%, how many days of additional payment terms are worth the same as a 1% reduction in price? Give the answer to one decimal place.</question>
+    <answer>30.4</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using the shared scenario parameters, how many percentage points of off-invoice rebate are worth the same as one percentage point of on-invoice discount? Give the answer to two decimal places.</question>
+    <answer>1.34</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>An offer is on the table at an ENUC of 86,534.55. The target is 76,000, the reservation price is 88,000, the BATNA is 81,000 and there is no switching cost. What verdict does the engine return?</question>
+    <answer>PUSH_ALTERNATIVE_CHEAPER</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>A principal raises a list price from 100,000 to 112,000. The item is on net binding and the current discount is 20%. What discount is required to hold the net price, as a percentage to two decimal places?</question>
+    <answer>28.57</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>A contract needs 58,000 units to reach its rebate tier. Nine months in, monthly volumes have been 4,600, 4,750, 5,100, 4,900, 5,200, 4,800, 5,050, 5,300 and 4,950 units. Will the tier be met by year end based on the run rate? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+
+</evaluation>
