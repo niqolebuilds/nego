@@ -1,6 +1,6 @@
 "use strict";
 // Two-page assistant. Page 1 explains the app; page 2 is a guided conversation that
-// shows one thing at a time. Helpers (el, sv, formatting, ladder, hbars, api) are in common.js.
+// shows one thing at a time. Helpers (el, sv, formatting, priceBars, hbars, api) are in common.js.
 // Every label from the data goes into the DOM through textContent, never innerHTML.
 
 const chat = { catalog: null, started: false, formSeq: 0 };
@@ -223,42 +223,49 @@ function verdictBubble(d, u) {
 }
 
 // ---------- see details ----------
+function evidenceSummary(t, u) {
+  const refs = t.references, today = t.incumbent_current_price, low = t.lowest_reference;
+  const SHORT = { best_ever: "the best price ever", internal_best: "the best Siloam hospital", vendor_own_best: `${t.vendor}'s own best`, competitor_best: "the best competitor" };
+  const beats = `Your target, ${unit(t.target_price)}, is lower than all ${refs.length} prices on record.`;
+  if (!today) return `${t.vendor} has no current price for this product. ${beats}`;
+  const cheaper = refs.filter((r) => r.price < today).length;
+  return `You pay ${unit(today)} per ${u} today. ${cheaper} of ${refs.length} prices on record are cheaper; the lowest is ${unit(low.price)} from ${SHORT[low.kind] || "the best reference"}. ${beats}`;
+}
+
 async function details(q) {
   let d;
   try { d = await thinking(api(`/api/options?${qs(q)}`)); } catch (e) { return oops(e, () => details(q)); }
   const t = d.targets, b = d.benchmark, u = unitName(d), cu = t.vendor_clinical_units_per_quoted_unit;
-  const SHORT = { best_ever: "Best ever", internal_best: "Best Siloam hospital", vendor_own_best: `${t.vendor}'s own best`, competitor_best: "Best competitor" };
-  const ladderBox = el("div", { class: "ladderbox" });
+  const chartBox = el("div", { class: "chartbox" });
   const evTable = el("table");
-  const siteBox = el("div", { class: "barsbox" });
+  const siteBox = el("div", { class: "chartbox" });
   const bubble = botWide(
     el("h3", { text: `The evidence — ${t.sku_name}` }),
-    d.beat_check ? el("p", {}, el("span", { class: `pill ${d.beat_check.status === "BEATS_ALL" ? "good" : "bad"}`, text: d.beat_check.status === "BEATS_ALL" ? "Today's price is already the best" : "Today's price can be beaten" }), " ", d.beat_check.headline) : null,
-    el("p", { class: "muted", text: `Every price per ${u}. The target sits below every price Siloam or a competitor has had.` }),
-    ladderBox,
-    el("div", { class: "table-wrap" }, evTable),
-    b.by_hospital.length > 1 ? el("h3", { text: "What each Siloam hospital pays (last 12 months)", style: "margin-top:14px" }) : null,
+    el("p", { text: evidenceSummary(t, u) }),
+    el("h4", { class: "chart-title", text: `How the prices compare (per ${u}, cheapest first)` }),
+    el("p", { class: "muted small", text: "Bars start at zero. The dashed line is your target: everything to its right costs more." }),
+    chartBox,
+    el("details", { class: "tableview" }, el("summary", { text: "Show as a table" }), el("div", { class: "table-wrap" }, evTable)),
+    b.by_hospital.length > 1 ? el("h4", { class: "chart-title", text: "What each Siloam hospital pays (last 12 months)" }) : null,
     b.by_hospital.length > 1 ? siteBox : null,
     el("div", { class: "actions" },
       act("Negotiate", () => { me(`Negotiate with ${t.vendor}`); negotiate(q); }),
       act("Ask about another product", () => { me("Ask about another product"); askForm(); }, "ghost")),
   );
+  const rows = evidenceRows(t);
   table(evTable, [
-    { label: "Evidence", get: (r) => el("span", { title: r.label, text: SHORT[r.kind] || r.label }) },
-    { label: `Per ${u}`, num: true, get: (r) => unit(r.price) },
-    { label: `Per ${t.vendor_quoted_unit}`, num: true, get: (r) => unit(r.price * cu) },
-    { label: "Where / when", get: (r) => [r.vendor, r.hospital, r.date].filter(Boolean).join(" · ") },
-  ], t.references);
-  const markers = t.references.map((r) => ({ label: SHORT[r.kind] || r.label, value: r.price, color: cssVar("--ref"), detail: [r.vendor, r.hospital, r.date].filter(Boolean).join(" · ") }));
-  markers.push({ label: "Stretch", value: t.opening_ask, color: cssVar("--series-3"), strong: true, detail: "Open here" });
-  markers.push({ label: "Target", value: t.target_price, color: cssVar("--accent"), strong: true, detail: "The deal to win" });
-  markers.push({ label: "Walk-away (proposal)", value: t.proposed_walk_away, color: cssVar("--sunset"), strong: true, detail: t.walk_away_basis });
+    { label: "Price", get: (r) => el("span", { title: r.full || r.label, text: r.label }) },
+    { label: `Per ${u}`, num: true, get: (r) => unit(r.value) },
+    { label: `Per ${t.vendor_quoted_unit}`, num: true, get: (r) => unit(r.value * cu) },
+    { label: "vs target", num: true, get: (r) => r.isTarget ? "—" : `${r.value > t.target_price ? "+" : ""}${pct(r.value / t.target_price - 1)}` },
+    { label: "Source", get: (r) => r.sub || "" },
+  ], [...rows].sort((a, b2) => a.value - b2.value));
   requestAnimationFrame(() => {
-    ladder(ladderBox, markers);
+    priceBars(chartBox, rows, { targetValue: t.target_price, packSize: cu, packName: t.vendor_quoted_unit, unitName: u });
     if (b.by_hospital.length > 1) {
       hbars(siteBox, b.by_hospital.map((h, i) => ({ label: h.hospital, value: h.weighted_price, h,
-        color: i === 0 ? cssVar("--series-3") : cssVar("--series-1") })), {
-        fmt: unit, note: (r) => `${pct(r.h.premium_vs_internal_best)} above the best hospital · ${r.h.vendors.join(", ")}`,
+        color: i === 0 ? cssVar("--ask") : cssVar("--series-3") })), {
+        fmt: unit, note: (r) => r.h.premium_vs_internal_best > 0 ? `${pct(r.h.premium_vs_internal_best)} above the best hospital · ${r.h.vendors.join(", ")}` : `Best hospital · ${r.h.vendors.join(", ")}`,
       });
     }
     reveal(bubble.parentElement);

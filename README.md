@@ -220,8 +220,11 @@ hospital intranet. It shows one thing at a time on purpose:
      - **Negotiate** gives a four-step plan: the opening ask and a line to say, what
        to trade if they push back (rebuilt from the vendor's current deal), your
        leverage, and the walk-away. Name an approver to get accept / push / walk.
-     - **See details** shows the price ladder, the evidence table and what each
-       hospital pays.
+     - **See details** explains the evidence in one sentence, then shows a sorted
+       bar chart. Every price on record, today's price, your asks and the walk-away
+       get one bar each, cheapest first and starting at zero, with a dashed line at
+       the target, so you can see that everything on record costs more. Below it are a
+       table view and what each hospital pays.
    - **Renewal Calendar & Risk Alerts**: contracts ending in 30–90 days on a month
      calendar. Each renewal is one row that expands to its targets, volume leverage
      and risks, with the high-severity risk alerts below.
@@ -229,8 +232,8 @@ hospital intranet. It shows one thing at a time on purpose:
 The full analytics views (overview, SKU explorer, vendor scorecard, alerts) are still
 at `/analytics`, one link away rather than on the first screen.
 
-Colours: Cobalt Pulse `#0c21a4` for actions, Blue Breeze `#b8c7f8` for the
-assistant, Spring Field `#d4d67d` for savings and highlights, Soft Cloud `#fffafd`
+Colours: Cobalt Pulse `#0c21a4` for actions and your asks, Blue Breeze `#b8c7f8` for the
+assistant and prices on record, Spring Field `#d4d67d` for savings and highlights, Soft Cloud `#fffafd`
 as the base, and Sunset Pop `#ff891f` only as a small dot for urgent dates and the
 walk-away.
 

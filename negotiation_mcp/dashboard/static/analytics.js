@@ -113,17 +113,13 @@ async function loadBrief(sku, vendor) {
     ));
   out.append(head);
 
-  const ladderCard = el("div", { class: "card" }, el("h2", { text: "Price ladder, per clinical unit" }),
-    el("p", { class: "sub", text: "Every reference price and the recommended prices on one axis. The target sits below every rung." }));
-  const ladderBox = el("div");
-  ladderCard.append(ladderBox);
-  out.append(ladderCard);
+  const chartCard = el("div", { class: "card" }, el("h2", { text: "How the prices compare, per clinical unit" }),
+    el("p", { class: "sub", text: "Cheapest first. Bars start at zero; the dashed line is the target, and every price on record sits to its right." }));
+  const chartBox = el("div");
+  chartCard.append(chartBox);
+  out.append(chartCard);
+  requestAnimationFrame(() => priceBars(chartBox, evidenceRows(t), { targetValue: t.target_price, packSize: cu, packName: q }));
   const SHORT = { best_ever: "Best ever", internal_best: "Best Siloam site", vendor_own_best: "Vendor's own best", competitor_best: "Best competitor" };
-  const markers = t.references.map((r) => ({ label: SHORT[r.kind] || r.label, value: r.price, color: cssVar("--ref"), detail: [r.vendor, r.hospital, r.date, r.source].filter(Boolean).join(" · ") }));
-  markers.push({ label: "Target", value: t.target_price, color: cssVar("--series-1"), strong: true, detail: `${pct(t.beat_margin, 0)} below the lowest reference` });
-  markers.push({ label: "Opening ask", value: t.opening_ask, color: cssVar("--series-3"), strong: true, detail: `${pct(t.anchor_margin, 0)} below target` });
-  markers.push({ label: "Walk-away (proposed)", value: t.proposed_walk_away, color: cssVar("--series-2"), strong: true, detail: t.walk_away_basis });
-  requestAnimationFrame(() => ladder(ladderBox, markers));
 
   const grid = el("div", { class: "grid2" });
   const ev = el("div", { class: "card" }, el("h2", { text: "Evidence" }));

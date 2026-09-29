@@ -196,7 +196,7 @@ body.app { background: var(--surface-0); min-height: 100vh; display: flex; flex-
 
 /* details */
 .bubble .table-wrap { background: var(--surface-1); border-radius: 10px; border: 1px solid var(--border); margin-top: 8px; }
-.bubble .ladderbox, .bubble .barsbox { background: var(--surface-1); border-radius: 10px; border: 1px solid var(--border); padding: 6px 8px; margin-top: 8px; }
+.bubble .chartbox { background: var(--surface-1); border-radius: 10px; border: 1px solid var(--border); padding: 6px 8px; margin-top: 8px; }
 
 .dock {
   position: sticky; bottom: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -208,6 +208,17 @@ body.app { background: var(--surface-0); min-height: 100vh; display: flex; flex-
 }
 .dock .quiet { border-color: var(--border); color: var(--text-secondary); }
 .dock a.quiet { margin-left: auto; }
-@media (max-width: 640px) { .thread { padding: 16px 12px 8px; } .dock { padding: 10px 12px 14px; } .dock a.quiet { margin-left: 0; } .msg .avatar { display: none; } }
+@media (max-width: 640px) {
+  .thread { padding: 16px 12px 8px; }
+  .dock { padding: 8px 12px 12px; flex-wrap: nowrap; overflow-x: auto; gap: 6px; }
+  .dock button, .dock a { padding: 6px 12px; font-size: 13px; white-space: nowrap; flex: none; }
+  .dock a.quiet { margin-left: 0; }
+  .msg .avatar { display: none; }
+}
 
 @media print { .dock, .bar, .banner { display: none; } }
+
+.chart-title { font-size: 14px; margin: 16px 0 2px; }
+.small { font-size: 12.5px; margin: 0 0 6px; }
+.tableview { margin-top: 8px; }
+.tableview summary { cursor: pointer; color: var(--link); font-weight: 600; font-size: 13px; }

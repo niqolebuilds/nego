@@ -65,7 +65,7 @@ function showTip(evt, header, rows) {
       el("strong", { text: r.value }), el("span", { text: r.label })));
   }
   tip.hidden = false;
-  const x = Math.min(evt.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  const x = Math.max(8, Math.min(evt.clientX + 14, window.innerWidth - tip.offsetWidth - 8));
   const y = Math.min(evt.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
   tip.style.left = x + "px"; tip.style.top = y + "px";
 }
@@ -186,31 +186,75 @@ function lineChart(target, { labels, series, refs }) {
   box.append(s);
 }
 
-function ladder(target, markers) {
-  // A number line: every reference price and the recommended prices, on one axis.
+// Evidence chart: one bar per price, cheapest first, bars from zero, a dashed line at the target.
+// Roles carry identity through colour AND text (legend + every row is labelled), never colour alone.
+const ROLE_LABEL = { ask: "Your asks", record: "Prices on record", today: "Today you pay", walk: "Walk-away (proposal)" };
+function evidenceRows(t) {
+  const SHORT = { best_ever: "Best price ever", internal_best: "Best Siloam hospital", vendor_own_best: `${t.vendor}'s own best`, competitor_best: "Best competitor" };
+  const TINY = { best_ever: "Best ever", internal_best: "Best hospital", vendor_own_best: "Vendor's best", competitor_best: "Best competitor" };
+  const rows = t.references.map((r) => ({ role: "record", label: SHORT[r.kind] || r.label, short: TINY[r.kind], full: r.label, value: r.price,
+    sub: [r.vendor, r.hospital, r.date].filter(Boolean).join(" · ") }));
+  rows.push({ role: "ask", label: "Stretch — open here", short: "Stretch", value: t.opening_ask, sub: "Your opening ask" });
+  rows.push({ role: "ask", label: "Target", value: t.target_price, sub: "The deal to win", isTarget: true });
+  if (t.incumbent_current_price) rows.push({ role: "today", label: "Today you pay", short: "Today", value: t.incumbent_current_price, sub: `${t.vendor}, 12-month average` });
+  rows.push({ role: "walk", label: "Walk-away (proposal)", short: "Walk-away", value: t.proposed_walk_away, sub: "Needs sign-off" });
+  return rows;
+}
+
+function priceBars(target, rows, { targetValue, packSize = 1, packName = "", unitName = "unit" } = {}) {
   const box = clear(target);
-  const W = Math.max(box.clientWidth || 700, 340), H = 48 + markers.length * 22, m = { l: 16, r: 16 };
-  const vals = markers.map((k) => k.value);
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  const pad = (hi - lo) * 0.06 || hi * 0.05; lo -= pad; hi += pad;
-  const x = (v) => m.l + ((v - lo) / (hi - lo)) * (W - m.l - m.r);
-  const s = sv("svg", { width: "100%", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "price ladder" });
-  const axisY = H - 22;
-  s.append(sv("line", { class: "gridline", x1: m.l, x2: W - m.r, y1: axisY, y2: axisY }));
-  s.append(sv("text", { x: m.l, y: H - 4 }, "cheaper ←"));
-  s.append(sv("text", { x: W - m.r, y: H - 4, "text-anchor": "end" }, "→ dearer"));
-  markers.sort((a, b) => a.value - b.value).forEach((k, i) => {
-    const cx = x(k.value), yy = 14 + i * 22;
-    const g = sv("g", { tabindex: 0 });
-    g.append(sv("line", { x1: cx, x2: cx, y1: yy + 4, y2: axisY, stroke: k.color, "stroke-width": k.strong ? 2 : 1, "stroke-dasharray": k.strong ? null : "3 3" }));
-    g.append(sv("circle", { cx, cy: axisY, r: k.strong ? 6 : 4.5, fill: k.color, stroke: cssVar("--surface-1"), "stroke-width": 2 }));
-    const text = `${k.label} · ${unit(k.value)}`;
-    const anchor = cx + 6 + text.length * 6.6 > W - m.r ? "end" : "start";
-    g.append(sv("text", { x: cx + (anchor === "end" ? -6 : 6), y: yy + 4, "text-anchor": anchor, class: k.strong ? "val" : null }, text));
-    const h = (e) => showTip(e, k.label, [{ value: unit(k.value), label: k.detail || "", color: k.color }]);
+  const roles = [...new Set(rows.map((r) => r.role))];
+  box.append(el("div", { class: "pb-legend" },
+    ["ask", "record", "today", "walk"].filter((r) => roles.includes(r)).map((r) => el("span", {}, el("i", { class: r }), ROLE_LABEL[r])),
+    targetValue ? el("span", {}, el("i", { class: "tline" }), "Target line") : null));
+
+  const W = Math.max(box.clientWidth || 640, 300);
+  const narrow = W < 560;
+  const labelW = Math.round(Math.min(230, W * (narrow ? 0.40 : 0.32)));
+  const valW = narrow ? 92 : 150;
+  const rowH = narrow ? 34 : 40, top = 22, barH = 16;
+  const sorted = [...rows].sort((a, b) => a.value - b.value);
+  const H = top + sorted.length * rowH + 6;
+  const max = Math.max(...sorted.map((r) => r.value)) * 1.02;
+  const x0 = labelW, plotW = W - labelW - valW;
+  const x = (v) => x0 + (v / max) * plotW;
+  const s = sv("svg", { width: "100%", viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": `Prices per ${unitName}, cheapest first` });
+
+  const tx = targetValue ? x(targetValue) : null;
+  if (tx != null) {
+    s.append(sv("line", { x1: tx, x2: tx, y1: top - 4, y2: H - 4, stroke: cssVar("--ask"), "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": "none" }));
+    s.append(sv("text", { class: "pb-tlabel", x: tx, y: 12, "text-anchor": "middle" }, "Target"));
+  }
+  sorted.forEach((r, i) => {
+    const y = top + i * rowH;
+    const g = sv("g", { class: "pb-row", tabindex: 0 });
+    g.append(sv("rect", { class: "pb-hit", x: 0, y, width: W, height: rowH, fill: "transparent", rx: 6 }));
+    const nameY = narrow || !r.sub ? y + rowH / 2 + 4 : y + rowH / 2 - 1;
+    g.append(sv("text", { class: `pb-name ${r.role === "ask" ? "ask" : ""}`, x: 6, y: nameY }, narrow ? (r.short || r.label) : r.label));
+    if (!narrow && r.sub) g.append(sv("text", { class: "pb-sub", x: 6, y: nameY + 14 }, r.sub.length > 34 ? r.sub.slice(0, 33) + "…" : r.sub));
+    const by = y + (rowH - barH) / 2, bw = Math.max(2, x(r.value) - x0);
+    const style = {
+      ask: { fill: cssVar("--ask") },
+      record: { fill: cssVar("--record"), stroke: cssVar("--record-edge"), "stroke-width": 1 },
+      today: { fill: "transparent", stroke: cssVar("--today-edge"), "stroke-width": 1.5, "stroke-dasharray": "4 3" },
+      walk: { fill: cssVar("--walk") },
+    }[r.role];
+    g.append(sv("rect", { x: x0, y: by, width: bw, height: barH, rx: 4, ...style }));
+    const delta = targetValue ? r.value / targetValue - 1 : null;
+    const dText = r.isTarget ? "your target" : delta == null ? "" : `${delta > 0 ? "+" : ""}${pct(delta)} vs target`;
+    g.append(sv("text", { class: "pb-val", x: x(r.value) + 8, y: by + barH / 2 - (narrow ? -4 : 1) }, unit(r.value)));
+    if (!narrow) g.append(sv("text", { class: "pb-delta", x: x(r.value) + 8, y: by + barH / 2 + 12 }, dText));
+    const tipRows = [{ value: unit(r.value), label: `per ${unitName}` }];
+    if (packSize > 1) tipRows.push({ value: unit(r.value * packSize), label: `per ${packName}` });
+    if (dText) tipRows.push({ value: dText, label: "" });
+    const h = (e) => showTip(e, r.full || r.label, r.sub ? [...tipRows, { value: "", label: r.sub }] : tipRows);
     g.addEventListener("pointermove", h); g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("focus", () => { const b = g.getBoundingClientRect(); h({ clientX: b.left + x(r.value), clientY: b.top }); });
+    g.addEventListener("blur", hideTip);
     s.append(g);
   });
+
   box.append(s);
 }
 
