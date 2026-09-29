@@ -1,14 +1,27 @@
+/* Brand: Cobalt Pulse #0c21a4 (authority), Blue Breeze #b8c7f8 (calm), Spring Field #d4d67d
+   (cooperative, positive), Soft Cloud #fffafd (base), Sunset Pop #ff891f (small accents only). */
 :root {
   color-scheme: light;
-  --surface-0: #f4f3f0;
-  --surface-1: #fcfcfb;
-  --border: #e2e0da;
-  --grid: #ebe9e4;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #7a7973;
-  --accent: #2a78d6;
-  --series-1: #2a78d6;
+  --cobalt: #0c21a4;
+  --breeze: #b8c7f8;
+  --spring: #d4d67d;
+  --cloud: #fffafd;
+  --sunset: #ff891f;
+  --surface-0: #fffafd;
+  --surface-1: #ffffff;
+  --surface-breeze: #eef2fe;
+  --border: #e3e3f0;
+  --grid: #eceaf3;
+  --text-primary: #0f1233;
+  --text-secondary: #474a6b;
+  --text-muted: #6f7290;
+  --accent: #0c21a4;
+  --accent-ink: #ffffff;
+  --accent-soft: #b8c7f8;
+  --link: #0c21a4;
+  --positive-bg: #d4d67d;
+  --positive-ink: #2d2f05;
+  --series-1: #0c21a4;
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
@@ -16,25 +29,31 @@
   --series-6: #008300;
   --series-7: #4a3aa7;
   --series-8: #e34948;
-  --ref: #52514e;
-  --good: #0f7b3f;
-  --warning: #b86e00;
+  --ref: #6f7290;
+  --good: #4f5a00;
+  --warning: #b35a00;
   --critical: #c62b2b;
-  --banner-bg: #fff4d6;
-  --banner-text: #5c3d00;
+  --banner-bg: #d4d67d;
+  --banner-text: #2d2f05;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --surface-0: #121211;
-    --surface-1: #1a1a19;
-    --border: #33332f;
-    --grid: #2a2a27;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #8f8e86;
-    --accent: #3987e5;
-    --series-1: #3987e5;
+    --surface-0: #0b0e2b;
+    --surface-1: #141a44;
+    --surface-breeze: #1c2562;
+    --border: #2a3470;
+    --grid: #232b60;
+    --text-primary: #f4f5ff;
+    --text-secondary: #c3c8ee;
+    --text-muted: #9098c8;
+    --accent: #4a5ee8;
+    --accent-ink: #ffffff;
+    --accent-soft: #2c3a8f;
+    --link: #a9b8ff;
+    --positive-bg: #d4d67d;
+    --positive-ink: #2d2f05;
+    --series-1: #7f8ff5;
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
@@ -42,22 +61,23 @@
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
-    --ref: #c3c2b7;
-    --good: #3fbf74;
-    --warning: #e5a13a;
+    --ref: #9098c8;
+    --good: #d4d67d;
+    --warning: #ffa24d;
     --critical: #f07070;
-    --banner-bg: #3a2e10;
-    --banner-text: #f5dc9a;
+    --banner-bg: #3a3c12;
+    --banner-text: #eef08f;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --grid: #2a2a27;
-  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --accent: #3987e5;
-  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --surface-0: #0b0e2b; --surface-1: #141a44; --surface-breeze: #1c2562; --border: #2a3470; --grid: #232b60;
+  --text-primary: #f4f5ff; --text-secondary: #c3c8ee; --text-muted: #9098c8;
+  --accent: #4a5ee8; --accent-ink: #ffffff; --accent-soft: #2c3a8f; --link: #a9b8ff; --positive-bg: #d4d67d; --positive-ink: #2d2f05;
+  --series-1: #7f8ff5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
-  --ref: #c3c2b7; --good: #3fbf74; --warning: #e5a13a; --critical: #f07070;
-  --banner-bg: #3a2e10; --banner-text: #f5dc9a;
+  --ref: #9098c8; --good: #d4d67d; --warning: #ffa24d; --critical: #f07070;
+  --banner-bg: #3a3c12; --banner-text: #eef08f;
 }
 
 * { box-sizing: border-box; }
@@ -109,8 +129,8 @@ select, input {
   border-radius: 6px; padding: 6px 8px; min-width: 200px; max-width: 100%;
 }
 button { font: inherit; cursor: pointer; }
-button.primary { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; }
-button.link { background: none; border: 0; color: var(--accent); padding: 7px 4px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; }
+button.link { background: none; border: 0; color: var(--link); padding: 7px 4px; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .seg button { background: var(--surface-1); color: var(--text-secondary); border: 0; padding: 6px 12px; }
 .seg button + button { border-left: 1px solid var(--border); }

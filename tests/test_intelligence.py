@@ -253,3 +253,30 @@ def test_as_of_moves_the_window(tiny_book):
     b = I.benchmark(tiny_book, "IVC-A", as_of=date(2025, 12, 31))
     assert b.as_of == "2025-12-31"
     assert b.annual_volume_12m == pytest.approx(7_500)
+
+
+def test_three_price_options(tiny_book):
+    t = I.recommend_targets(tiny_book, "IVC-A", "Alpha")
+    opts = I.price_options(t)
+    assert [o["key"] for o in opts] == ["stretch", "target", "fallback"]
+    assert opts[0]["price_per_clinical_unit"] < opts[1]["price_per_clinical_unit"] < opts[2]["price_per_clinical_unit"]
+    assert opts[2]["price_per_clinical_unit"] == pytest.approx(t.lowest_reference.price)
+    assert opts[1]["price_per_quoted_unit"] == pytest.approx(t.target_price * 50)
+
+
+def test_offer_from_history_uses_latest_price_and_group_volume(tiny_book):
+    offer = I.offer_from_history(tiny_book, "IVC-A", "Alpha")
+    assert offer.uom.clinical_units_per_quoted_unit == 50
+    assert offer.invoice_price_per_clinical_unit in (pytest.approx(10_000), pytest.approx(11_000))
+    assert offer.clinical_units_paid == pytest.approx(15_000)
+    assert I.offer_from_history(tiny_book, "IVC-A", "Beta") is None
+
+
+def test_renewal_calendar_window(tiny_book):
+    assert I.renewal_calendar(tiny_book, min_days=30, max_days=90)["renewals"] == []
+    cal = I.renewal_calendar(tiny_book, min_days=200, max_days=300)
+    (r,) = cal["renewals"]
+    assert r["hospital"] == "Site South" and r["days_left"] == 291
+    assert r["volume_multiple"] == pytest.approx(15_000 / 30_000)
+    with pytest.raises(E.EngineError):
+        I.renewal_calendar(tiny_book, min_days=90, max_days=30)

@@ -58,6 +58,10 @@ async def index(_: Request) -> Response:
     return FileResponse(STATIC / "index.html")
 
 
+async def analytics(_: Request) -> Response:
+    return FileResponse(STATIC / "analytics.html")
+
+
 async def api_status(_: Request) -> Response:
     try:
         book = get_book()
@@ -140,11 +144,79 @@ async def api_brief(request: Request) -> Response:
         return fail(e)
 
 
+def _brief(q, with_offer: bool) -> dict:
+    if not q.get("sku") or not q.get("vendor"):
+        raise E.EngineError("Choose a target clinical SKU and a vendor")
+    book = get_book()
+    offer = I.offer_from_history(book, q["sku"], q["vendor"]) if with_offer else None
+    res = I.negotiation_brief(book, q["sku"], q["vendor"], params(), offer=offer,
+                              reservation_approved_by=q.get("approved_by") or None)
+    res["offer_from_history"] = offer is not None
+    if offer is not None:
+        res["current_offer"] = {
+            "quoted_unit": offer.uom.quoted_unit,
+            "clinical_units_per_quoted_unit": offer.uom.clinical_units_per_quoted_unit,
+            "list_price_per_quoted_unit": offer.list_price_per_quoted_unit,
+            "on_invoice_discount": offer.on_invoice_discount,
+            "payment_terms_days": offer.payment_terms_days,
+            "invoice_price_per_clinical_unit": offer.invoice_price_per_clinical_unit,
+            "annual_clinical_units": offer.clinical_units_paid,
+        }
+    return res
+
+
+async def api_catalog(_: Request) -> Response:
+    """SKUs and vendors for the two form fields, with who supplies what."""
+    book = get_book()
+    supplied: dict[str, set] = {}
+    for o in book.observations:
+        supplied.setdefault(o.sku, set()).add(o.vendor)
+    skus = []
+    for s in sorted(book.skus.values(), key=lambda s: (s.equivalence_group, s.sku_name)):
+        group_vendors = sorted({v for g in book.group_skus(s.equivalence_group) for v in supplied.get(g.sku, ())})
+        skus.append({"sku": s.sku, "sku_name": s.sku_name, "equivalence_group": s.equivalence_group,
+                     "vendors": sorted(supplied.get(s.sku, ())), "group_vendors": group_vendors,
+                     "single_source": s.single_source})
+    return ok({"skus": skus, "vendors": sorted({o.vendor for o in book.observations}),
+               "as_of": book.latest_date.isoformat(), "is_sample": book.is_sample,
+               "banner": SAMPLE_BANNER if book.is_sample else None, "currency": book.currency})
+
+
+async def api_options(request: Request) -> Response:
+    """Three price options for one SKU and vendor, with the evidence behind them."""
+    try:
+        return ok(_brief(request.query_params, with_offer=False))
+    except E.EngineError as e:
+        return fail(e)
+
+
+async def api_negotiate(request: Request) -> Response:
+    """Negotiation plan: the vendor's current deal rebuilt from history, and what to trade."""
+    try:
+        return ok(_brief(request.query_params, with_offer=True))
+    except E.EngineError as e:
+        return fail(e)
+
+
+async def api_renewals(request: Request) -> Response:
+    q = request.query_params
+    try:
+        lo, hi = int(q.get("min_days", 30)), int(q.get("max_days", 90))
+        return ok(I.renewal_calendar(get_book(), min_days=lo, max_days=hi, params=params()))
+    except (ValueError, E.EngineError) as e:
+        return fail(e)
+
+
 def create_app(breakage: float | None = None) -> Starlette:
     STATE["breakage"] = breakage
     return Starlette(
         routes=[
             Route("/", index),
+            Route("/analytics", analytics),
+            Route("/api/catalog", api_catalog),
+            Route("/api/options", api_options),
+            Route("/api/negotiate", api_negotiate),
+            Route("/api/renewals", api_renewals),
             Route("/api/status", api_status),
             Route("/api/overview", api_overview),
             Route("/api/skus", api_skus),

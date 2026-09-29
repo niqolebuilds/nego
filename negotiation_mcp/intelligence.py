@@ -995,6 +995,160 @@ def lookup(
 
 
 # --------------------------------------------------------------------------
+# Three price options, a current offer rebuilt from history, renewal calendar
+# --------------------------------------------------------------------------
+
+
+def price_options(rec: TargetRecommendation) -> list[dict]:
+    """The three prices to negotiate with, most ambitious first.
+
+    1. **Stretch**: the opening ask. Say it first; it leaves room to concede.
+    2. **Target**: beats every historical, site and competitor price.
+    3. **Fallback**: ties the best price on record. Still beats every other reference.
+    """
+    cu = rec.vendor_clinical_units_per_quoted_unit
+    today = rec.incumbent_current_price
+    low = rec.lowest_reference
+    who = f" ({low.vendor})" if low.vendor else ""
+    name = {
+        "competitor_best": "the best competitor's price",
+        "internal_best": "the best Siloam hospital's price",
+        "best_ever": "the best price on record",
+        "vendor_own_best": "their own best price",
+    }.get(low.kind, "the best price on record")
+    rows = [
+        ("stretch", "Stretch — open here", rec.opening_ask,
+         "Open here. It leaves room to concede and still land on target."),
+        ("target", "Target — the deal to win", rec.target_price,
+         f"{pct(rec.beat_margin, 0)} under {name}{who}. Beats every price on record."),
+        ("fallback", "Fallback — hold here", low.price,
+         f"Matches {name}{who}. Don't settle above this without approval."),
+    ]
+    out = []
+    for key, label, price, why in rows:
+        out.append(
+            {
+                "key": key,
+                "label": label,
+                "price_per_clinical_unit": price,
+                "price_per_quoted_unit": price * cu,
+                "quoted_unit": rec.vendor_quoted_unit,
+                "saving_vs_today_pct": (1 - price / today) if today else None,
+                "annual_saving": (today - price) * rec.annual_volume if today else None,
+                "why": why,
+            }
+        )
+    return out
+
+
+def offer_from_history(book: PriceBook, sku_query: str, vendor_query: str, as_of: date | None = None) -> E.Offer | None:
+    """Rebuild the vendor's current deal from the latest purchase or contract price.
+
+    Annual quantity is the group's last 12 months with this vendor. Returns None when
+    the vendor has never supplied this SKU, which is a new-vendor negotiation.
+    """
+    vendor = book.resolve_vendor(vendor_query)
+    info = book.resolve_sku(sku_query, vendor)
+    as_of = book.resolve_as_of(as_of)
+    since, _ = _window(as_of, 12)
+    history = [o for o in book.query(skus=[info.sku], until=as_of, sources=PAID_SOURCES) if o.vendor == vendor]
+    if not history:
+        return None
+    latest = max(history, key=lambda o: (o.date, o.source == "po"))
+    units = sum(o.clinical_units for o in history if o.source == "po" and o.date >= since)
+    if not units:
+        units = latest.clinical_units
+    return E.Offer(
+        vendor=vendor,
+        sku_group=info.equivalence_group,
+        quoted_annual_quantity=units / latest.uom.clinical_units_per_quoted_unit,
+        list_price_per_quoted_unit=latest.list_price,
+        uom=latest.uom,
+        on_invoice_discount=latest.discount,
+        payment_terms_days=latest.payment_terms_days or 30,
+        single_source=info.single_source,
+    )
+
+
+def renewal_calendar(
+    book: PriceBook,
+    as_of: date | None = None,
+    min_days: int = 30,
+    max_days: int = 90,
+    params: E.Parameters | None = None,
+) -> dict:
+    """Contracts ending in the window, each with targets and volume leverage ready.
+
+    A contract is the latest one per site, vendor and SKU. Each renewal carries the
+    recommended target and opening ask, the group's consolidated volume against the
+    site's own, and any open risk alert on the same SKU or vendor.
+    """
+    if not 0 <= min_days <= max_days:
+        raise EngineError("min_days must be between 0 and max_days")
+    as_of = book.resolve_as_of(as_of)
+    latest: dict[tuple, PriceObservation] = {}
+    for c in book.query(sources=["contract"], until=as_of):
+        key = (c.hospital, c.vendor, c.sku)
+        if key not in latest or c.date > latest[key].date:
+            latest[key] = c
+
+    risk = alerts(book, as_of, params)
+    renewals = []
+    target_cache: dict[tuple, TargetRecommendation] = {}
+    for c in latest.values():
+        if not c.contract_end:
+            continue
+        days = (c.contract_end - as_of).days
+        if not min_days <= days <= max_days:
+            continue
+        if (c.sku, c.vendor) not in target_cache:
+            target_cache[(c.sku, c.vendor)] = recommend_targets(book, c.sku, c.vendor, as_of)
+        rec = target_cache[(c.sku, c.vendor)]
+        site_units = c.clinical_units
+        group_units = rec.annual_volume
+        site_price = c.net_price_per_clinical_unit
+        related = [a for a in risk if a["kind"] != "renewal" and (a["sku"] == c.sku or a["vendor"] == c.vendor)
+                   and (a["hospital"] in (None, c.hospital) or a["sku"] == c.sku)]
+        renewals.append(
+            {
+                "contract_end": c.contract_end.isoformat(),
+                "days_left": days,
+                "hospital": c.hospital,
+                "vendor": c.vendor,
+                "sku": c.sku,
+                "sku_name": c.sku_name,
+                "quoted_unit": c.uom.quoted_unit,
+                "contract_value": c.spend,
+                "contract_price_per_clinical_unit": site_price,
+                "target_price": rec.target_price,
+                "opening_ask": rec.opening_ask,
+                "proposed_walk_away": rec.proposed_walk_away,
+                "saving_at_target": max(0.0, site_price - rec.target_price) * site_units,
+                "site_annual_units": site_units,
+                "group_annual_units": group_units,
+                "volume_multiple": (group_units / site_units) if site_units else None,
+                "single_source": rec.single_source,
+                "leverage": rec.leverage,
+                "risks": related[:4],
+            }
+        )
+    renewals.sort(key=lambda r: (r["contract_end"], -r["contract_value"]))
+    return {
+        "as_of": as_of.isoformat(),
+        "window": [min_days, max_days],
+        "renewals": renewals,
+        "total_contract_value": sum(r["contract_value"] for r in renewals),
+        "total_saving_at_target": sum(r["saving_at_target"] for r in renewals),
+        "urgent_under_window": sum(
+            1 for c in latest.values() if c.contract_end and 0 <= (c.contract_end - as_of).days < min_days
+        ),
+        "risk_alerts": [a for a in risk if a["kind"] != "renewal" and a["severity"] == "high"][:8],
+        "currency": book.currency,
+        "is_sample": book.is_sample,
+    }
+
+
+# --------------------------------------------------------------------------
 # The one-call brief
 # --------------------------------------------------------------------------
 
@@ -1062,6 +1216,7 @@ def negotiation_brief(
         "is_sample": book.is_sample,
         "benchmark": bm,
         "targets": rec,
+        "options": price_options(rec),
         "beat_check": check,
         "target_enuc": target_enuc,
         "counter_offer": counter,
