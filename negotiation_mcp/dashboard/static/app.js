@@ -27,18 +27,20 @@ function sv(tag, attrs = {}, text) {
   return n;
 }
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Indonesian number style: Rp 9.905, Rp 5,36 M, 10,6%. Non-IDR currencies keep the international style.
+const isIDR = () => (state.currency || "IDR").toUpperCase() === "IDR";
+const nf = (d) => new Intl.NumberFormat(isIDR() ? "id-ID" : "en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const num = (v, d = 0) => (v == null ? "—" : nf(d).format(v));
+const SCALES = [[1e12, "T", 2], [1e9, "M", 2], [1e6, "jt", 1], [1e3, "rb", 1]];
 function compact(v) {
   if (v == null) return "—";
-  const a = Math.abs(v);
-  if (a >= 1e12) return (v / 1e12).toFixed(2) + " tn";
-  if (a >= 1e9) return (v / 1e9).toFixed(2) + " bn";
-  if (a >= 1e6) return (v / 1e6).toFixed(1) + " m";
-  if (a >= 1e3) return (v / 1e3).toFixed(1) + " k";
-  return v.toFixed(0);
+  for (const [size, word, d] of SCALES) if (Math.abs(v) >= size) return `${num(v / size, d)} ${word}`;
+  return num(v, 0);
 }
-const money = (v) => (v == null ? "—" : `${state.currency} ${compact(v)}`);
-const unit = (v) => (v == null ? "—" : `${state.currency} ${v.toLocaleString("en-US", { maximumFractionDigits: v < 100 ? 2 : 0 })}`);
-const pct = (v, d = 1) => (v == null ? "—" : `${(v * 100).toFixed(d)}%`);
+const prefix = (v, body) => `${v < 0 ? "-" : ""}${isIDR() ? "Rp" : state.currency} ${body}`;
+const money = (v) => (v == null ? "—" : prefix(v, compact(Math.abs(v))));
+const unit = (v) => (v == null ? "—" : prefix(v, num(Math.abs(v), Math.abs(v) < 100 && v !== Math.trunc(v) ? 2 : 0)));
+const pct = (v, d = 1) => (v == null ? "—" : `${num(v * 100, d)}%`);
 async function api(path) {
   const r = await fetch(path);
   const j = await r.json();
@@ -173,9 +175,9 @@ function lineChart(target, { labels, series, refs }) {
       const v = series[n][i];
       if (v == null) continue;
       dots.append(sv("circle", { cx: x(i), cy: y(v), r: 4, fill: colors[n], stroke: cssVar("--surface-1"), "stroke-width": 2 }));
-      rows.push({ value: unit(v), label: n, color: colors[n] });
+      rows.push({ raw: v, value: unit(v), label: n, color: colors[n] });
     }
-    rows.sort((a, b) => parseFloat(b.value.replace(/[^0-9.]/g, "")) - parseFloat(a.value.replace(/[^0-9.]/g, "")));
+    rows.sort((a, b) => b.raw - a.raw);
     for (const r of refs || []) rows.push({ value: unit(r.value), label: r.label });
     showTip(e, labels[i], rows);
   });
@@ -236,7 +238,6 @@ async function loadOverview() {
   table($("opps"), [
     { label: "SKU", get: (r) => r.sku_name + (r.single_source ? " (single-source)" : "") },
     { label: "Spend 12m", num: true, get: (r) => money(r.spend_12m) },
-    { label: "Paying / best", num: true, get: (r) => `${unit(r.weighted_price_12m)} / ${compact(r.best_available_price)}` },
     { label: "Opportunity", num: true, get: (r) => money(r.total_opportunity) },
     { label: "% of spend", num: true, get: (r) => pct(r.opportunity_pct_of_spend) },
   ], d.opportunities, (r) => { location.hash = `#sku/${encodeURIComponent(r.sku)}`; });
@@ -306,8 +307,9 @@ function openBrief(sku, vendor) {
   location.hash = `#brief/${encodeURIComponent(sku)}/${encodeURIComponent(vendor)}`;
 }
 
+let briefSeq = 0;
 async function loadBrief(sku, vendor) {
-  const out = clear($("brief-out"));
+  const seq = ++briefSeq;
   if (sku) $("brief-sku").value = sku;
   if (vendor) $("brief-vendor").value = vendor;
   sku = $("brief-sku").value; vendor = $("brief-vendor").value;
@@ -316,7 +318,13 @@ async function loadBrief(sku, vendor) {
   let d;
   try {
     d = await api(`/api/brief?sku=${encodeURIComponent(sku)}&vendor=${encodeURIComponent(vendor)}${approver ? "&approved_by=" + encodeURIComponent(approver) : ""}`);
-  } catch (e) { out.append(el("p", { class: "error", text: e.message })); return; }
+  } catch (e) {
+    if (seq === briefSeq) clear($("brief-out")).append(el("p", { class: "error", text: e.message }));
+    return;
+  }
+  // A newer request started while this one was loading: let it render instead.
+  if (seq !== briefSeq) return;
+  const out = clear($("brief-out"));
   const t = d.targets, q = t.vendor_quoted_unit, cu = t.vendor_clinical_units_per_quoted_unit;
 
   const head = el("div", { class: "card" },
@@ -326,7 +334,7 @@ async function loadBrief(sku, vendor) {
       el("div", {}, el("div", { class: "l", text: "Opening ask" }), el("div", { class: "big", text: unit(t.opening_ask) }), el("div", { class: "s", text: `${unit(t.opening_ask_per_quoted_unit)} per ${q}` })),
       el("div", { class: "target" }, el("div", { class: "l", text: "Target" }), el("div", { class: "big", text: unit(t.target_price) }), el("div", { class: "s", text: `${unit(t.target_per_quoted_unit)} per ${q}` })),
       el("div", {}, el("div", { class: "l", text: `Walk-away — ${t.walk_away_status}` }), el("div", { class: "big", text: unit(t.proposed_walk_away) }), el("div", { class: "s", text: t.walk_away_basis })),
-      el("div", {}, el("div", { class: "l", text: "Annual value at target" }), el("div", { class: "big", text: money(t.annual_saving_at_target) }), el("div", { class: "s", text: `on ${Math.round(t.annual_volume).toLocaleString()} units a year` })),
+      el("div", {}, el("div", { class: "l", text: "Annual value at target" }), el("div", { class: "big", text: money(t.annual_saving_at_target) }), el("div", { class: "s", text: `on ${num(t.annual_volume)} units a year` })),
     ));
   out.append(head);
 
@@ -397,7 +405,7 @@ async function route() {
 async function init() {
   const st = await api("/api/status");
   state.currency = st.currency || "IDR";
-  $("asof").textContent = `data to ${st.date_to} · ${st.rows.toLocaleString()} price rows · ${st.skus} SKUs · ${st.vendors} vendors · ${st.hospitals} sites`;
+  $("asof").textContent = `data to ${st.date_to} · ${num(st.rows)} price rows · ${st.skus} SKUs · ${st.vendors} vendors · ${st.hospitals} sites`;
   if (st.banner) { $("banner").textContent = st.banner; $("banner").hidden = false; }
   state.skus = await api("/api/skus");
   state.vendors = [...new Set(state.skus.flatMap((s) => s.vendors))].sort();

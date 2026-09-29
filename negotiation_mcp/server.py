@@ -44,6 +44,7 @@ from .formatting import (
     vendor_spend_markdown,
     verdict_markdown,
 )
+from .numfmt import num, pct, rp
 from .pricebook import SAMPLE_BANNER, PriceBook, cached_book
 
 mcp = FastMCP("negotiation_mcp")
@@ -467,24 +468,24 @@ async def negotiation_rebate_expected_value(params: RebateInput) -> str:
             [
                 "# Rebate expected value",
                 "",
-                f"- Headline top-tier rate: **{result.headline_top_rate * 100:.2f}%**",
-                f"- Effective net rate: **{result.effective_net_rate * 100:.2f}%**",
-                f"- Haircut against headline: **{result.headline_haircut * 100:.0f}%**",
+                f"- Headline top-tier rate: **{pct(result.headline_top_rate)}**",
+                f"- Effective net rate: **{pct(result.effective_net_rate)}**",
+                f"- Haircut against headline: **{pct(result.headline_haircut, 0)}**",
                 "",
                 "| Step | Amount |",
                 "|---|---:|",
-                f"| Gross expected | {cur} {result.gross_expected:,.0f} |",
-                f"| After breakage | {cur} {result.after_breakage:,.0f} |",
-                f"| After tax treatment | {cur} {result.after_tax:,.0f} |",
-                f"| **Net expected** | **{cur} {result.net_expected:,.0f}** |",
+                f"| Gross expected | {rp(result.gross_expected, cur)} |",
+                f"| After breakage | {rp(result.after_breakage, cur)} |",
+                f"| After tax treatment | {rp(result.after_tax, cur)} |",
+                f"| **Net expected** | **{rp(result.net_expected, cur)}** |",
                 "",
                 "| Tier | Threshold | Rate | P(reach) | Marginal P | Expected |",
                 "|---:|---:|---:|---:|---:|---:|",
             ]
             + [
-                f"| {i + 1} | {t['threshold_units']:,.0f} | {t['rate'] * 100:.2f}% | "
-                f"{t['cumulative_probability'] * 100:.0f}% | "
-                f"{t['marginal_probability'] * 100:.0f}% | {cur} {t['expected_value']:,.0f} |"
+                f"| {i + 1} | {num(t['threshold_units'])} | {pct(t['rate'])} | "
+                f"{pct(t['cumulative_probability'], 0)} | "
+                f"{pct(t['marginal_probability'], 0)} | {rp(t['expected_value'], cur)} |"
                 for i, t in enumerate(result.per_tier)
             ]
         )
@@ -545,21 +546,18 @@ async def negotiation_trade_ratios(params: TradeRatiosInput) -> str:
             [
                 f"# Trade ratios — {result['vendor']}",
                 "",
-                f"One percent of price is worth **{cur} "
-                f"{result['value_of_one_percent_price']:,.0f}** per year.",
+                f"One percent of price is worth **{rp(result['value_of_one_percent_price'], cur)}** per year.",
                 "",
                 "| 1% of price equals | |",
                 "|---|---:|",
-                f"| Payment-terms days | {result['equivalent_payment_terms_days']:.1f} days |",
+                f"| Payment-terms days | {num(result['equivalent_payment_terms_days'], 1)} days |",
                 f"| Off-invoice rebate points | "
-                f"{result['equivalent_off_invoice_rebate_points'] * 100:.2f}% |",
+                f"{pct(result['equivalent_off_invoice_rebate_points'])} |",
                 f"| Bonus clinical units | "
-                f"{result['equivalent_bonus_clinical_units']:,.0f} units |",
-                f"| Free-goods ratio | {result['equivalent_free_goods_ratio'] * 100:.2f}% |",
-                f"| Placement value over the term | {cur} "
-                f"{result['equivalent_placement_value_over_term']:,.0f} |",
-                f"| Annual service value | {cur} "
-                f"{result['equivalent_annual_service_value']:,.0f} |",
+                f"{num(result['equivalent_bonus_clinical_units'])} units |",
+                f"| Free-goods ratio | {pct(result['equivalent_free_goods_ratio'])} |",
+                f"| Placement value over the term | {rp(result['equivalent_placement_value_over_term'], cur)} |",
+                f"| Annual service value | {rp(result['equivalent_annual_service_value'], cur)} |",
                 "",
                 f"> {result['note']}",
             ]

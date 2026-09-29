@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Sequence
 
+from .numfmt import num, pct, rp
+
 # --------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------
@@ -419,7 +421,7 @@ def compute_enuc(offer: Offer, params: Parameters) -> EnucResult:
         share = offer.sponsorship_annual_value / invoice_spend
         if share > 0.05:
             flags.append(
-                f"WATCH: sponsorship is {share:.1%} of invoice spend. A vendor quoting above "
+                f"WATCH: sponsorship is {pct(share, 1)} of invoice spend. A vendor quoting above "
                 "market while sponsoring heavily may be buying the price gap."
             )
 
@@ -574,8 +576,8 @@ def decide(
 
     if target_enuc > reservation:
         raise EngineError(
-            f"Target ENUC ({target_enuc:,.0f}) is above the reservation price "
-            f"({reservation:,.0f}). The target must be the better outcome; check the inputs."
+            f"Target ENUC ({rp(target_enuc)}) is above the reservation price "
+            f"({rp(reservation)}). The target must be the better outcome; check the inputs."
         )
 
     rationale: list[str] = []
@@ -589,8 +591,8 @@ def decide(
     else:
         batna_adjusted = batna_enuc + switching_cost_per_unit
         rationale.append(
-            f"BATNA {batna_enuc:,.0f} plus switching cost {switching_cost_per_unit:,.0f} "
-            f"= {batna_adjusted:,.0f}. That is the number the incumbent must beat."
+            f"BATNA {rp(batna_enuc)} plus switching cost {rp(switching_cost_per_unit)} "
+            f"= {rp(batna_adjusted)}. That is the number the incumbent must beat."
         )
 
     if single_source:
@@ -683,20 +685,20 @@ def convert_price_increase(
         required_discount = 1.0 - (old_net / new_list_price)
         new_net = old_net
         explanation = (
-            f"Net binding holds the net price at {old_net:,.2f}. To absorb a "
-            f"{list_increase:.2%} list increase the discount must rise from "
-            f"{old_discount:.2%} to {required_discount:.2%}."
+            f"Net binding holds the net price at {rp(old_net)}. To absorb a "
+            f"{pct(list_increase)} list increase the discount must rise from "
+            f"{pct(old_discount)} to {pct(required_discount)}."
         )
         if required_discount < 0:
             raise EngineError(
-                f"Holding the net price at {old_net:,.2f} would require a NEGATIVE discount "
-                f"of {required_discount:.2%}, because the new list price ({new_list_price:,.2f}) "
+                f"Holding the net price at {rp(old_net)} would require a NEGATIVE discount "
+                f"of {pct(required_discount)}, because the new list price ({rp(new_list_price)}) "
                 f"is already below it. Net binding cannot apply here — either the list price "
                 f"fell, or the old discount is wrong. Check the inputs before proceeding."
             )
         if max_discount_cap is not None and required_discount > max_discount_cap:
             explanation += (
-                f" This exceeds the agreed discount cap of {max_discount_cap:.2%} — "
+                f" This exceeds the agreed discount cap of {pct(max_discount_cap)} — "
                 "escalate rather than accept."
             )
         resulting = required_discount
@@ -704,9 +706,9 @@ def convert_price_increase(
         resulting = old_discount
         new_net = new_list_price * (1.0 - old_discount)
         explanation = (
-            f"Discount binding holds the discount at {old_discount:.2%}, so the "
-            f"{list_increase:.2%} list increase passes through to the net price, "
-            f"moving it from {old_net:,.2f} to {new_net:,.2f}."
+            f"Discount binding holds the discount at {pct(old_discount)}, so the "
+            f"{pct(list_increase)} list increase passes through to the net price, "
+            f"moving it from {rp(old_net)} to {rp(new_net)}."
         )
 
     net_change = (new_net / old_net) - 1.0 if old_net else 0.0
@@ -800,13 +802,13 @@ def rebate_realization(
 
     if not will_meet:
         message = (
-            f"Projected year-end volume {projected:,.0f} falls short of the "
-            f"{tier_target_units:,.0f} tier. Renegotiate the tier or accept the lower rate — "
+            f"Projected year-end volume {num(projected)} falls short of the "
+            f"{num(tier_target_units)} tier. Renegotiate the tier or accept the lower rate — "
             "do not buy volume you do not need to reach it."
         )
     elif breakage_to_date > 0:
         message = (
-            f"{breakage_to_date:,.0f} of rebate has been earned and accrued but not yet "
+            f"{rp(breakage_to_date)} of rebate has been earned and accrued but not yet "
             "collected. This is cash already won; chase it."
         )
     else:

@@ -8,6 +8,8 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from typing import Any
 
+from .numfmt import num, rp
+from .numfmt import pct as _pct
 from .engine import BindingConversionResult, EnucResult, RealizationResult, VerdictResult
 
 
@@ -17,15 +19,17 @@ class ResponseFormat(str, Enum):
 
 
 def money(value: float, currency: str = "IDR") -> str:
-    return f"{currency} {value:,.0f}"
+    """Annual amounts, whole rupiah: 'Rp 107.157.799'."""
+    return rp(value, currency, decimals=0)
 
 
 def unit_money(value: float, currency: str = "IDR") -> str:
-    return f"{currency} {value:,.2f}"
+    """Per-unit prices: whole rupiah, two decimals under Rp 100."""
+    return rp(value, currency)
 
 
 def pct(value: float, places: int = 2) -> str:
-    return f"{value * 100:.{places}f}%"
+    return _pct(value, places)
 
 
 def to_json(payload: Any) -> str:
@@ -60,7 +64,7 @@ def enuc_markdown(result: EnucResult, currency: str = "IDR") -> str:
         f"| **Total annual net cost** | **{money(result.total_annual_cost_ledger_a, currency)}** | "
         f"**{unit_money(result.enuc_ledger_a, currency)}** |",
         "",
-        f"Effective usable units: **{result.effective_usable_units:,.0f}** per year",
+        f"Effective usable units: **{num(result.effective_usable_units)}** per year",
         "",
     ]
 
@@ -153,12 +157,12 @@ def realization_markdown(r: RealizationResult, currency: str = "IDR") -> str:
         [
             f"# Rebate realization — {r.status}",
             "",
-            f"- Tier target: {r.tier_target_units:,.0f} units",
-            f"- Cumulative to date: {r.cumulative_units:,.0f} units "
+            f"- Tier target: {num(r.tier_target_units)} units",
+            f"- Cumulative to date: {num(r.cumulative_units)} units "
             f"({pct(r.tier_achieved_pct, 1)} of tier)",
             f"- Period elapsed: {pct(r.period_elapsed, 1)}",
             f"- Pace index: **{r.pace_index:.2f}** (1.00 = exactly on pace)",
-            f"- Projected year-end: {r.projected_year_end_units:,.0f} units — "
+            f"- Projected year-end: {num(r.projected_year_end_units)} units — "
             f"tier {'will' if r.tier_will_be_met else 'will NOT'} be met",
             "",
             "| | Amount |",
@@ -247,7 +251,7 @@ def benchmark_markdown(b, banner: bool = True) -> str:
         lines.append(f"| Volume-weighted average paid, last 12 months | {unit_money(b.weighted_avg_paid_12m, c)} | |")
     lines += [
         "",
-        f"- Volume, last 12 months: **{b.annual_volume_12m:,.0f}** · spend **{money(b.annual_spend_12m, c)}**",
+        f"- Volume, last 12 months: **{num(b.annual_volume_12m)}** · spend **{money(b.annual_spend_12m, c)}**",
         f"- Internal price variance (paid above the best site): **{money(b.internal_price_variance_12m, c)}**",
     ]
     if b.single_source:
@@ -256,7 +260,7 @@ def benchmark_markdown(b, banner: bool = True) -> str:
     for v in b.by_vendor:
         best = unit_money(v["best_price"], c) if v["best_price"] is not None else "—"
         wp = unit_money(v["weighted_price_12m"], c) if v["weighted_price_12m"] is not None else "—"
-        lines.append(f"| {v['vendor']} | {best} | {unit_money(v['latest_price'], c)} ({v['latest_source']}, {v['latest_date']}) | {wp} | {v['volume_12m']:,.0f} |")
+        lines.append(f"| {v['vendor']} | {best} | {unit_money(v['latest_price'], c)} ({v['latest_source']}, {v['latest_date']}) | {wp} | {num(v['volume_12m'])} |")
     if b.by_hospital:
         lines += ["", "### By Siloam site (last 12 months)", "", "| Site | Weighted price | Premium vs best site | Excess spend |", "|---|---:|---:|---:|"]
         for h in b.by_hospital:
@@ -293,7 +297,7 @@ def targets_markdown(t, banner: bool = True) -> str:
         "",
     ]
     if t.annual_saving_at_target is not None:
-        lines.append(f"**Annual value at target: {money(t.annual_saving_at_target, c)}** on {t.annual_volume:,.0f} units.")
+        lines.append(f"**Annual value at target: {money(t.annual_saving_at_target, c)}** on {num(t.annual_volume)} units.")
         lines.append("")
     lines += ["### Evidence (lowest first)", "", "| Reference | Per clinical unit | Where / when |", "|---|---:|---|"]
     lines += [_ref_row(r, c) for r in t.references]
@@ -335,7 +339,7 @@ def counter_markdown(co) -> str:
     lines += ["### One lever at a time", "", "| Lever | Now | Needed |", "|---|---:|---:|"]
     for lv in co.levers:
         fmt = (lambda v: pct(v)) if "ratio" in lv["lever"] or "discount" in lv["lever"] else (
-            (lambda v: f"{v:,.0f} days") if "days" in lv["lever"] else (lambda v: unit_money(v, c)))
+            (lambda v: f"{num(v)} days") if "days" in lv["lever"] else (lambda v: unit_money(v, c)))
         need = fmt(lv["required"]) if lv["feasible"] else "not reachable alone"
         lines.append(f"| {lv['description']} | {fmt(lv['current'])} | {need} |")
     lines += ["", "### Packages (suggested order)", ""]

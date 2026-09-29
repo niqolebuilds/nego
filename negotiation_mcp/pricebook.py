@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .engine import BLOCKING_DATA_ELEMENTS, EngineError, UomConversion
+from .numfmt import pct, rp
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "sample"
 SAMPLE_MARKER = "SAMPLE_DATA"
@@ -250,8 +251,8 @@ def _parse_observation(r: dict[str, str], file: str, row: int) -> PriceObservati
         raise EngineError(f"{_where(file, row)}: prices cannot be negative")
     if list_price and abs(list_price * (1.0 - discount) - net_price) > 0.01 * max(net_price, 1.0):
         raise EngineError(
-            f"{_where(file, row)}: net_price {net_price:,.2f} is inconsistent with list_price "
-            f"{list_price:,.2f} less discount {discount:.2%}. Fix the export or leave one blank."
+            f"{_where(file, row)}: net_price {rp(net_price, decimals=2)} is inconsistent with list_price "
+            f"{rp(list_price, decimals=2)} less discount {pct(discount)}. Fix the export or leave one blank."
         )
 
     terms = r.get("payment_terms_days", "")

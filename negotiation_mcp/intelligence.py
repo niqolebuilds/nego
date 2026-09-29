@@ -34,6 +34,7 @@ from typing import Callable, Sequence
 
 from . import engine as E
 from .engine import EngineError
+from .numfmt import num, pct, rp
 from .pricebook import PriceBook, PriceObservation, SkuInfo, add_months, month_key
 
 PRICE_BASIS = (
@@ -395,7 +396,7 @@ def recommend_targets(
         biggest_site = max((r["volume"] for r in bm.by_hospital), default=0.0)
         if biggest_site and bm.annual_volume_12m > biggest_site * 1.2:
             leverage.append(
-                f"Consolidated group volume is {bm.annual_volume_12m:,.0f} {info.clinical_unit}s a year, "
+                f"Consolidated group volume is {num(bm.annual_volume_12m)} {info.clinical_unit}s a year, "
                 f"{bm.annual_volume_12m / biggest_site:.1f}x the largest single site. Offer the "
                 "group volume in exchange for the target price; don't give it away free."
             )
@@ -407,14 +408,14 @@ def recommend_targets(
     if bm.internal_best and bm.by_hospital and len(bm.by_hospital) > 1:
         worst = bm.by_hospital[-1]
         leverage.append(
-            f"Internal price variance: {worst['hospital']} pays {worst['premium_vs_internal_best']:.1%} more "
+            f"Internal price variance: {worst['hospital']} pays {pct(worst['premium_vs_internal_best'], 1)} more "
             f"than {bm.internal_best.hospital}. Ask for one group price at the best site's level."
         )
     creep = _vendor_price_change(book, info.sku, vendor, as_of_d)
     if creep is not None and creep["excess_over_index"] > 0.02:
         leverage.append(
-            f"{vendor} raised this price {creep['nominal_change']:.1%} in a year against an index move of "
-            f"{creep['index_change']:.1%}. Ask them to justify the {creep['excess_over_index']:.1%} excess."
+            f"{vendor} raised this price {pct(creep['nominal_change'], 1)} in a year against an index move of "
+            f"{pct(creep['index_change'], 1)}. Ask them to justify the {pct(creep['excess_over_index'], 1)} excess."
         )
 
     caveats = [PRICE_BASIS]
@@ -534,7 +535,7 @@ def beat_check(
         failed = [c for c in checks if not c["beats"]]
         headline = (
             f"Does not beat {len(failed)} of {len(checks)} references. It must fall below "
-            f"{price_to_beat:,.2f} per clinical unit to beat all of them."
+            f"{rp(price_to_beat)} per clinical unit to beat all of them."
         )
     return BeatCheckResult(
         sku=bm.sku,
@@ -662,7 +663,7 @@ def counter_offer(
 
     fg = _solve(lambda x: enuc(replace(offer, free_goods_ratio=x)), offer.free_goods_ratio,
                 max(max_free_goods_ratio, offer.free_goods_ratio), target_enuc)
-    add("free_goods_ratio", f"Bonus stock (capped at {max_free_goods_ratio:.0%})", offer.free_goods_ratio,
+    add("free_goods_ratio", f"Bonus stock (capped at {pct(max_free_goods_ratio, 0)})", offer.free_goods_ratio,
         fg, lambda x: x, lambda v: replace(offer, free_goods_ratio=v))
 
     packages: list[dict] = []
@@ -693,8 +694,8 @@ def counter_offer(
         vendor_cost = r.gross_expected / invoice_spend if invoice_spend else 0.0
         package(
             "Convert rebate to on-invoice discount",
-            f"The rebate costs the vendor about {vendor_cost:.2%} of invoice in expectation but is worth only "
-            f"{r.net_expected / invoice_spend if invoice_spend else 0:.2%} to Siloam after breakage, tax and lag. "
+            f"The rebate costs the vendor about {pct(vendor_cost, 2)} of invoice in expectation but is worth only "
+            f"{pct(r.net_expected / invoice_spend if invoice_spend else 0, 2)} to Siloam after breakage, tax and lag. "
             "Swap it for invoice discount first.",
             replace(offer, rebate_tiers=[]),
             {"rebate_tiers": "removed"},
@@ -711,7 +712,7 @@ def counter_offer(
     fgr = max(offer.free_goods_ratio, package_free_goods_ratio)
     if fgr > offer.free_goods_ratio:
         package(
-            f"Bonus stock {fgr:.0%}, then price",
+            f"Bonus stock {pct(fgr, 0)}, then price",
             "Bonus stock costs the vendor its production cost, not its price. Only take it for "
             "units you will use before expiry.",
             replace(offer, free_goods_ratio=fgr),
@@ -871,8 +872,8 @@ def alerts(
         ch = _vendor_price_change(book, sku, vendor, as_of)
         if ch and ch["excess_over_index"] > creep_threshold:
             alert("price_creep", "high" if ch["excess_over_index"] > 2 * creep_threshold else "medium",
-                  f"{vendor} raised {book.skus[sku].sku_name} {ch['nominal_change']:.1%}",
-                  f"Up {ch['nominal_change']:.1%} year on year against an index move of {ch['index_change']:.1%}.",
+                  f"{vendor} raised {book.skus[sku].sku_name} {pct(ch['nominal_change'], 1)}",
+                  f"Up {pct(ch['nominal_change'], 1)} year on year against an index move of {pct(ch['index_change'], 1)}.",
                   ch["excess_over_index"] * ch["spend_12m"], sku, vendor)
 
     since, _ = _window(as_of, 12)
@@ -885,9 +886,9 @@ def alerts(
         for h in hospitals[1:]:
             if h["premium_vs_internal_best"] > variance_threshold:
                 alert("above_group_best", "high" if h["premium_vs_internal_best"] > 2 * variance_threshold else "medium",
-                      f"{h['hospital']} pays {h['premium_vs_internal_best']:.1%} over the group's best for {info.sku_name}",
-                      f"{best['hospital']} pays {best['weighted_price']:,.2f} per unit; {h['hospital']} pays "
-                      f"{h['weighted_price']:,.2f}.",
+                      f"{h['hospital']} pays {pct(h['premium_vs_internal_best'], 1)} over the group's best for {info.sku_name}",
+                      f"{best['hospital']} pays {rp(best['weighted_price'])} per unit; {h['hospital']} pays "
+                      f"{rp(h['weighted_price'])}.",
                       h["excess_spend_vs_internal_best"], info.sku, ", ".join(h["vendors"]), h["hospital"])
 
     lb_since = add_months(as_of, -24)
@@ -900,9 +901,9 @@ def alerts(
         qp = book.adjusted_unit_price(q, as_of)[0]
         if best and qp > best.price * 1.02:
             alert("quote_above_history", "medium",
-                  f"{q.vendor} quoted {book.skus[q.sku].sku_name} {qp / best.price - 1:.1%} above its own best",
-                  f"Quote of {q.net_price_per_clinical_unit:,.2f} per unit to {q.hospital} on {q.date}; "
-                  f"{q.vendor} has sold it at {best.price:,.2f} (in today's money).",
+                  f"{q.vendor} quoted {book.skus[q.sku].sku_name} {pct(qp / best.price - 1, 1)} above its own best",
+                  f"Quote of {rp(q.net_price_per_clinical_unit)} per unit to {q.hospital} on {q.date}; "
+                  f"{q.vendor} has sold it at {rp(best.price)} (in today's money).",
                   (qp - best.price) * q.clinical_units, q.sku, q.vendor, q.hospital)
 
     horizon = as_of + timedelta(days=renewal_days)
@@ -1043,18 +1044,18 @@ def negotiation_brief(
             )
         else:
             verdict_note = (
-                f"No verdict: the walk-away of {rec.proposed_walk_away:,.2f} per unit is {SIGN_OFF_STATUS}. "
+                f"No verdict: the walk-away of {rp(rec.proposed_walk_away)} per unit is {SIGN_OFF_STATUS}. "
                 "Pass reservation_approved_by with the approver's name to get ACCEPT / PUSH / WALK."
             )
 
     headline = (
-        f"Target for {rec.sku_name} from {rec.vendor}: {rec.currency} {rec.target_price:,.2f} per clinical unit "
-        f"({rec.currency} {rec.target_per_quoted_unit:,.2f} per {rec.vendor_quoted_unit}). "
-        f"That is {rec.beat_margin:.0%} below the best reference ({rec.lowest_reference.label}: "
-        f"{rec.lowest_reference.price:,.2f}). Open at {rec.opening_ask:,.2f}."
+        f"Target for {rec.sku_name} from {rec.vendor}: {rp(rec.target_price, rec.currency)} per clinical unit "
+        f"({rp(rec.target_per_quoted_unit, rec.currency)} per {rec.vendor_quoted_unit}). "
+        f"That is {pct(rec.beat_margin, 0)} below the best reference ({rec.lowest_reference.label}: "
+        f"{rp(rec.lowest_reference.price)}). Open at {rp(rec.opening_ask)}."
     )
     if rec.annual_saving_at_target:
-        headline += f" Worth {rec.currency} {rec.annual_saving_at_target:,.0f} a year against today's price."
+        headline += f" Worth {rp(rec.annual_saving_at_target, rec.currency)} a year against today's price."
 
     return {
         "headline": headline,

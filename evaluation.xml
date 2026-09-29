@@ -46,7 +46,7 @@
 
   <qa_pair>
     <question>For the shared scenario, what is the annual rupiah value of choosing the best offer over the worst on the award basis, rounded to the nearest million?</question>
-    <answer>1,059,685,525</answer>
+    <answer>Rp 1.059.685.525</answer>
   </qa_pair>
 
   <qa_pair>
@@ -81,8 +81,8 @@
   -->
 
   <qa_pair>
-    <question>Using the price book, what target net price per clinical unit should Siloam aim for on IV cannula 22G (Prima) from Prima Alkes? Round to two decimal places.</question>
-    <answer>9,905.39</answer>
+    <question>Using the price book, what target net price per clinical unit should Siloam aim for on IV cannula 22G (Prima) from Prima Alkes? Round to the nearest rupiah.</question>
+    <answer>Rp 9.905</answer>
   </qa_pair>
 
   <qa_pair>
@@ -106,7 +106,7 @@
   </qa_pair>
 
   <qa_pair>
-    <question>Medisindo offers Ceftriaxone 1 g injection at 13,000 per vial. Does that beat every historical, internal and competitor reference? Answer with the engine's status.</question>
+    <question>Medisindo offers Ceftriaxone 1 g injection at Rp 13.000 per vial. Does that beat every historical, internal and competitor reference? Answer with the engine's status.</question>
     <answer>BEATS_ALL</answer>
   </qa_pair>
 
