@@ -1,130 +1,301 @@
-# Plan: Price-intelligence negotiation engine on top of `negotiation_mcp`
+# negotiation_mcp
 
-## Context
+The decision layer for Siloam healthcare procurement negotiation, exposed as an MCP server.
 
-Your MCP (`negotiation_mcp`, from the uploaded zip) already turns any vendor offer into one comparable number (ENUC, Ledger A/B), ranks offers, prices trade-offs and gives a verdict. It **cannot yet answer "what price should we get?"**. It has no memory of what Siloam has paid, what competing vendors quoted, or what the cheapest Siloam hospital pays, so it can't set a target that beats all of that.
+## Why this exists
 
-Goal: extend the MCP so Claude can answer questions like *"what's the best price we can get for SKU X from vendor Y?"*. The answer is a target that beats Siloam's own history, competing vendors and the best internal (hospital-to-hospital) price. It comes with evidence, an opening ask, a proposed walk-away and the concessions to trade.
+The Blueprint AI process catalogue documents 91 workflow steps across 12 procurement
+processes. Principal Contract Negotiation step 18 branches on *"if thresholds are
+breached, simulate alternative options"*, and step 20 on *"is there a deadlock with
+significant financial impact requiring escalation?"* — while the same document's own
+gap list says:
 
-Decisions you made:
-- **Competitors** means competing vendors on equivalent SKUs, plus Siloam's own hospitals (internal price variance).
-- **Targets:** the engine recommends a target, an opening ask and a walk-away. The walk-away stays **PROPOSED until a named person signs off**, which keeps your D-21 "refuse to guess" rule.
-- **Interface:** new tools on the existing MCP.
-- **Data:** you'll export real data later. For now I build a pluggable CSV data layer and a synthetic sample dataset. Every answer based on the sample data is clearly labelled.
+> "Absence of standardized threshold limits for automatic escalation versus continued
+> negotiation loops."
 
-The repo `/home/user/nego` is empty. Step 0 imports your zip as the baseline so the diff shows only the new work.
+The process branches on a threshold that has never been defined. Consumables Seasonal
+Price Increase has the same hole at step 8. **This server is that missing decision
+layer.**
 
-## Step 0: Baseline commit
-- Extract the zip's `negotiation_mcp/` contents into the repo root (`negotiation_mcp/` package, `tests/`, `README.md`, `pyproject.toml`, `requirements.txt`, `evaluation.xml`).
-- Commit as "Import negotiation_mcp v0.1.0" on `claude/jolly-faraday-8ohsv6`.
-- Run `pytest` to confirm the 33 tests pass before changing anything.
+It also closes a loop nothing else closes: no documented process tracks rebate
+realization, so measured breakage has never fed back into the next cycle's rebate model.
 
-## Step 1: Data layer (`negotiation_mcp/pricebook.py`, new)
-Pure loading and normalisation, with no MCP code in it.
-- `PriceObservation` dataclass: date, hospital, vendor, sku, sku_name, equivalence_group, quoted_unit, clinical_units_per_quoted_unit, quantity, list_price, discount, net_price, source (`po` | `contract` | `quote`) and optional payment_terms_days.
-- `net_price_per_clinical_unit` is computed through the existing `UomConversion` in `engine.py`, so pack-size tricks can't distort comparisons.
-- `PriceBook`: loads CSVs from `NEGOTIATION_DATA_DIR` (default `data/sample/`). Files:
-  - `price_history.csv` (required)
-  - `sku_master.csv` (optional; equivalence groups for competing vendors, single-source flag D-23)
-  - `price_index.csv` (optional monthly index, used to bring old prices to today's money; if it's missing, results are flagged "not inflation-adjusted")
-- Query helpers: filter by sku / name substring / equivalence group / vendor / hospital / date range.
-- Validation fails loudly and names the row: a missing UoM factor raises D-13, the same as the engine's `_require_blocking` pattern.
-- `data/templates/*.csv`: header-only templates so you know exactly what to export.
-- `scripts/generate_sample_data.py`: deterministic (seeded) synthetic data covering about 5 hospitals, 4 vendors and 30 SKUs in 8 equivalence groups, over 36 months. It deliberately plants internal price variance, a pack-size trap and a cheaper competing vendor. Output goes to `data/sample/`.
+## What it answers
 
-## Step 2: Intelligence kernel (`negotiation_mcp/intelligence.py`, new, pure)
-The same style as `engine.py`: frozen dataclasses, `EngineError`, deterministic.
-- `benchmark(book, sku, as_of)`:
-  - best-ever and best-trailing-12-month net unit price, each with who, where and when
-  - p25 and median prices
-  - per-vendor best price and per-hospital price
-  - competing-vendor best price within the equivalence group
-  - **internal price variance** = Σ volume × (hospital price − best internal price)
-- `recommend_targets(book, sku, vendor, annual_volume, as_of, anchor_margin=0.05)`:
-  - **Target** = the lowest defensible reference, i.e. the minimum of: best internal price (trailing 24 months), best competing-vendor price, and this vendor's own best historical price. Old prices are index-adjusted.
-  - **Opening ask** = target × (1 − anchor_margin).
-  - **Proposed walk-away** = the current incumbent price, or the trailing median if there is no incumbent. Status is `PROPOSED — requires sign-off (D-21)`.
-  - Each number carries an evidence list (the source rows).
-  - Volume leverage: the group's consolidated annual volume compared with each historical deal's volume is reported as a talking point, not silently priced in.
-- `beat_check(offer, book, params)` checks whether an offer's net invoice price per clinical unit beats every historical, competitor and internal reference. It returns `BEATS_ALL`, or the list of references it fails to beat and the gap to each. If the history holds full terms, it also compares at ENUC level via `engine.compute_enuc`, and says clearly which basis each comparison uses.
-- `counter_offer(offer, target_enuc, params)`:
-  - Uses `engine.compute_enuc` with bisection to solve, one lever at a time, for what reaches the target: extra on-invoice discount, payment-terms days, free-goods ratio, or converting rebate points into on-invoice discount (via `engine.trade_ratios`).
-  - It also returns 2–3 mixed packages, ordered cheapest-for-the-vendor first. Your README's rule "trade rebate for on-invoice first" becomes the first package.
-- `savings_opportunities(book, top_n)` ranks SKUs by internal price variance plus the gap to the best competitor, times volume. This answers "where do we negotiate first".
+*"What's the best price we can get for X from vendor Y?"* The answer is a target that
+beats every price Siloam has paid, every Siloam site's price and every competing
+vendor's price on an equivalent product. It comes with the evidence, an opening ask, a
+proposed walk-away and the concessions to trade. See [Price intelligence](#price-intelligence).
 
-## Step 3: MCP tools (`negotiation_mcp/server.py`, extended)
-These follow the existing pattern: a `StrictModel` Pydantic input, `ResponseFormat` markdown/JSON through `_respond`, `_error`, read-only annotations, and helpers in `formatting.py`. The PriceBook is loaded once and cached.
+## What it does
 
-| New tool | Answers |
+Collapses any vendor offer — price, on-invoice discount, rebate tiers, bonus stock,
+wastage, payment terms, instrument capex or free placement, service, logistics — into
+one comparable number:
+
+**ENUC — Effective Net Unit Cost, in currency per usable clinical unit.**
+
+Two ledgers, always reported separately:
+
+| | Includes sponsorship | Used for |
+|---|---|---|
+| **Ledger A** | No | Ranking and award. The only basis. |
+| **Ledger B** | Yes | Monitoring and disclosure. Never for award. |
+
+Sponsorship is real value transferred and the engine quantifies it — but a vendor
+quoting above market while sponsoring heavily is buying the price gap, and separating
+the ledgers is what makes that visible.
+
+## Install
+
+```bash
+pip install -r requirements.txt        # mcp 1.x: FastMCP was renamed in mcp 2.x
+python -m negotiation_mcp.server        # stdio transport
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "negotiation": {
+      "command": "python",
+      "args": ["-m", "negotiation_mcp.server"],
+      "cwd": "/absolute/path/to/negotiation_mcp"
+    }
+  }
+}
+```
+
+## Tools
+
+| Tool | Replaces / fills | Notes |
+|---|---|---|
+| `negotiation_compute_enuc` | PCN step 12 (Cost and Margin Impact Modeling) | The core. One offer to one number. |
+| `negotiation_compare_offers` | PCN step 8, VendorSourcing step 2 | Ranks, flags sponsorship rank-flips. |
+| `negotiation_rebate_expected_value` | — | Headline rate to expected cash. |
+| `negotiation_trade_ratios` | Feeds PCN step 9 | What 1% of price buys elsewhere. |
+| `negotiation_verdict` | **PCN steps 18 and 20, SPI step 8** | The empty gate. |
+| `negotiation_convert_price_increase` | SPI steps 5 and 6 | Net vs discount binding. |
+| `negotiation_rebate_realization` | *no process exists today* | Accrual to cash, breakage. |
+| `negotiation_data_readiness` | — | What is still missing, who owns it, and the price book's status. |
+| `negotiation_brief` | **"Best price for X from Y?"** | One call: benchmark, targets, beat-check, counter-offer, verdict. |
+| `negotiation_recommend_targets` | Feeds PCN step 9 | Target, opening ask, PROPOSED walk-away, with evidence. |
+| `negotiation_beat_check` | — | Does this quote beat history, sites and competitors? |
+| `negotiation_counter_offer` | PCN step 18 | How much of each lever closes the gap, alone and as packages. |
+| `negotiation_benchmark` | PCN step 8 | Best ever, best today, by vendor, by site, equivalents. |
+| `negotiation_price_lookup` | — | Any price, any vendor, any site. |
+| `negotiation_savings_opportunities` | — | Where to negotiate first. |
+| `negotiation_alerts` | — | Price creep, overpaying sites, expensive quotes, renewals, rebates at risk. |
+| `negotiation_vendor_spend` | — | Share of wallet and growth. |
+
+Every tool is read-only, idempotent and closed-world: no external API and no writes.
+The calculation tools take their data as parameters. The price-intelligence tools
+read the local price book (CSV exports) and never write to it.
+
+## Design decision: the engine refuses to guess
+
+Nine data elements in the requirements register are blocking. Rather than substituting
+defaults, tools that need one of them fail with the register ID and the owner:
+
+```
+Error: Missing required input 'reservation_enuc'. This is a known blocking data
+element: D-21 — target / reservation / BATNA (owner: you + Heldra). The engine will
+not substitute a default, because a plausible-looking wrong number here is worse
+than no number.
+```
+
+This is deliberate. A reservation price invented by the tool would produce a
+confident ACCEPT or WALK with nothing behind it.
+
+The elements the engine touches directly:
+
+| Key | Register | Owner |
+|---|---|---|
+| `escalation_thresholds` | D-20 | Andreas Tanjaya |
+| `reservation_enuc` | D-21 | You + Heldra |
+| `rebate_breakage_rate` | D-18 | Finance / AP |
+| `uom_conversion` | D-13 | IT / Master Data |
+| `single_source_flag` | D-23 | Pharmacy |
+
+## Things worth knowing
+
+**Money is shown the Indonesian way.** Amounts read `Rp 9.905` (dot for thousands,
+whole rupiah) and large totals `Rp 5,36 M` (`rb` ribu, `jt` juta, `M` miliar, `T`
+triliun). Percentages use a decimal comma, `10,6%`. Amounts under Rp 100 keep two
+decimals so cheap per-unit prices stay comparable. This is display only: JSON output,
+CSV input and the warehouse carry raw numbers. Pass another `currency` and the output
+falls back to the international style.
+
+**Unit of measure is the denominator, and it is load-bearing.** Vendors quote in boxes
+of 50, boxes of 100 and singles, deliberately. `clinical_units_per_quoted_unit`
+normalises them. A test asserts that quoting the same deal in boxes of 50 versus
+singles gives an identical ENUC — get this field wrong and every number is wrong in a
+way that still looks plausible.
+
+**Bonus stock is a denominator effect, not a price cut.** And it is only worth
+something if the units are usable before expiry, so wastage applies to bonus and paid
+units alike.
+
+**A "free" instrument is avoided capex.** It reduces cost, amortised over the contract
+term — which is exactly how you price a reagent-rental deal against an outright
+purchase, and how you find the consumable premium that is paying for it.
+
+**One rebate point is worth less than one price point.** Rebate is probability-weighted,
+lagged, and less tax-efficient. `negotiation_trade_ratios` computes the exchange rate;
+trading rebate points for on-invoice price is usually cheaper for the vendor *and*
+better for you, which makes it the first trade to look for.
+
+**Single-source changes the meaning of WALK.** If a SKU has no clinically acceptable
+alternative there is no credible walk-away. Pass `single_source: true` and the verdict
+rationale says so — treat a WALK as an escalation, not an instruction.
+
+## Known caveat
+
+The net-binding and discount-binding definitions in
+`negotiation_convert_price_increase` are **inferred from the Seasonal Price Increase
+process document (steps 4–6), not from a contract.** Data element D-08 is still open.
+Every response carries that caveat in the output. Confirm with the category owner
+before anyone relies on it.
+
+## Price intelligence
+
+### Where the target comes from
+
+For one SKU and one vendor, the engine builds an evidence ladder:
+
+| Rung | Meaning |
 |---|---|
-| `negotiation_price_lookup` | "What have we paid or been quoted for X, from whom, where?" |
-| `negotiation_benchmark` | Best, median, per-vendor, per-hospital and internal variance |
-| `negotiation_recommend_targets` | Target, opening ask and proposed walk-away, with evidence |
-| `negotiation_beat_check` | "Is this quote better than everything we know?" |
-| `negotiation_counter_offer` | Which levers, and how much of each, reach the target |
-| `negotiation_brief` | **One-call answer.** SKU + vendor (+ optional current offer) → benchmark, targets, beat-check, counter packages and verdict. This is the tool Claude uses for "best price for X from Y". |
-| `negotiation_savings_opportunities` | The top SKUs to renegotiate across the group |
+| Best ever | The lowest price Siloam has ever paid or been quoted for the SKU, in today's money |
+| Best Siloam site | The lowest 12-month price any Siloam hospital pays (internal price variance) |
+| Vendor's own best | What this vendor has already accepted, in the last 24 months |
+| Best competitor | The best other vendor's price on a clinically equivalent SKU, in the last 12 months |
 
-Changes to existing tools:
-- `negotiation_verdict` accepts `reservation_approved_by`. A PROPOSED walk-away from `recommend_targets` can be used only when a name is given; otherwise the D-21 refusal stays.
-- `negotiation_data_readiness` also reports the PriceBook's status: files loaded, row counts, date coverage, missing UoM factors, and whether the data is SAMPLE or real.
-- Every price-intelligence response that uses `data/sample/` starts with a "SAMPLE DATA — not real prices" banner.
+- **Target** = `beat_margin` (default 1%) below the lowest rung. A deal at target beats every historical price, every site and every competitor.
+- **Opening ask** = `anchor_margin` (default 5%) below the target.
+- **Walk-away** = what Siloam pays this vendor today. It is labelled **PROPOSED — requires sign-off (D-21)**. The engine gives no ACCEPT / PUSH / WALK verdict until `reservation_approved_by` names someone other than the negotiator. This keeps the "refuse to guess" rule.
 
-## Step 4: Tests, evaluation, docs
-- `tests/test_pricebook.py`: CSV load, UoM normalisation (a box of 50 and a single price the same), row-level validation errors, index adjustment.
-- `tests/test_intelligence.py`:
-  - the target is never above any reference
-  - the opening ask is below the target
-  - the walk-away is labelled PROPOSED
-  - beat_check detects each failure type
-  - each counter-offer lever, fed back through `compute_enuc`, actually reaches the target (round-trip)
-  - savings are ranked correctly
-  - equivalence-group competitors are included
-- Extend `tests/smoke_mcp.py` to call `negotiation_brief` end to end over stdio.
-- Add about 5 questions to `evaluation.xml` against the sample dataset.
-- README: new "Price intelligence" section covering the data schema, the `NEGOTIATION_DATA_DIR` setting, the sign-off rule, and how to swap in your real export.
+Every price is normalised to a **clinical unit** through the same `UomConversion` as
+ENUC. A box of 50 and a single can never be compared as if they were alike. The
+history records invoice prices, so benchmarks sit on the net-invoice-price basis. When
+you pass the vendor's full offer, `negotiation_brief` translates the target into ENUC
+on that offer's own terms, and the counter-offer is solved through `compute_enuc`.
 
-## Step 5: Features modelled on Metabase / Superset and Ramp
-You asked to "copy" these. I'll reproduce their **features**, not their code or branding. Ramp is proprietary. Metabase is AGPL, so vendoring it would force AGPL on this repo. Superset is Apache-licensed, but it is far too large to fork usefully.
+### Loading your data
 
-**5a. BI-ready warehouse (the Metabase/Superset part), `negotiation_mcp/warehouse.py`**
-- `scripts/build_warehouse.py` loads the CSVs into **SQLite** at `data/warehouse.db`. SQLite is in the Python standard library, so there's no new dependency.
-- Tables: `price_history`, `sku_master`, `price_index`.
-- Analytical views: `v_net_unit_price` (UoM-normalised), `v_internal_price_variance`, `v_vendor_vs_best`, `v_savings_opportunities`, `v_price_trend_monthly`.
-- The views are computed by the same Python kernel and written back as tables, so there's one source of truth and dashboards can never disagree with the MCP.
-- `deploy/docker-compose.yml` runs the **real Metabase** (the official image, run as-is) pointed at `warehouse.db`, plus `deploy/SUPERSET.md` with the connection string `sqlite:////data/warehouse.db`. Procurement staff then get the full Metabase/Superset experience (saved questions, drill-down, filters, scheduled email reports) without us rebuilding it.
+The price book is a folder of CSV exports. Point `NEGOTIATION_DATA_DIR` at it:
 
-**5b. Built-in dashboard (Metabase-style, zero install), `negotiation_mcp/dashboard/`**
-- It's served with Starlette and uvicorn, which `mcp` already depends on: `negotiation-mcp dashboard --port 8080`. It's a read-only, single-page HTML app using vanilla JS and Chart.js.
-- Pages:
-  - **Overview**: KPI tiles (spend, savings identified, % of spend above best price) and the top 10 opportunities.
-  - **SKU explorer**: price-trend line chart by vendor and by hospital, a benchmark band (best / p25 / median), and filters for hospital, vendor, equivalence group and date.
-  - **Vendor scorecard**: each vendor's price against the best competitor, per SKU.
-  - **Negotiation brief**: the `negotiation_brief` output rendered as a printable page.
-- JSON endpoints under `/api/*` reuse `intelligence.py`, the same functions the MCP tools call.
+| File | Required | Content |
+|---|---|---|
+| `price_history.csv` | yes | One row per PO line, contract price or quote: date, hospital, vendor, sku, pack size (`clinical_units_per_quoted_unit`, D-13), quantity, list/discount/net price, source (`po`/`contract`/`quote`), terms, contract end |
+| `sku_master.csv` | no | Name, **equivalence group** (what counts as a competing product), single-source flag (D-23) |
+| `price_index.csv` | no | Monthly index, so old prices compare in today's money |
+| `rebate_programs.csv` | no | Signed rebate tiers, tracked against purchase history |
 
-**5c. Ramp-style price intelligence and alerts, in `intelligence.py`**
-- **"You're paying X% more than the best price"** callout on every SKU and vendor (Ramp's price-benchmark insight), using internal and competitor references.
-- **Savings alerts**, `negotiation_alerts` tool plus the dashboard banner:
-  - price creep (a vendor raised the net price more than the index)
-  - a hospital paying above the group's best price
-  - a new quote above history
-  - a rebate tier at risk (reuses `engine.rebate_realization`)
-- **Renewal calendar**: contracts expiring within N days, with the negotiation brief pre-built. `price_history` gains an optional `contract_end` column for this.
-- **Vendor spend view**: spend by vendor, share of wallet and trend, the basis for consolidation leverage.
+Header-only templates are in `data/templates/`. Validation errors name the file, the
+row and the field. A missing pack size is refused with D-13 rather than assumed to be 1.
 
-## Critical files
-- New: `negotiation_mcp/warehouse.py`, `negotiation_mcp/dashboard/` (app.py and static/), `scripts/build_warehouse.py`, `deploy/docker-compose.yml`, `deploy/SUPERSET.md`, `tests/test_warehouse.py`, `tests/test_dashboard.py`
-- New: `negotiation_mcp/pricebook.py`, `negotiation_mcp/intelligence.py`, `scripts/generate_sample_data.py`, `data/templates/`, `data/sample/`, `tests/test_pricebook.py`, `tests/test_intelligence.py`
-- Modified: `negotiation_mcp/server.py`, `negotiation_mcp/formatting.py`, `tests/smoke_mcp.py`, `README.md`, `evaluation.xml`
-- Reused unchanged: `engine.py` (`compute_enuc`, `trade_ratios`, `decide`, `UomConversion`, `EngineError`, `_require_blocking`)
+Until you export real data, the engine runs on a **synthetic sample** in
+`data/sample/`, generated by `python scripts/generate_sample_data.py`. Every answer
+built on it starts with a `SAMPLE DATA` banner.
 
-## Verification
-1. `pip install -r requirements.txt pytest`, then `python scripts/generate_sample_data.py`.
-2. `python -m pytest tests/ -q`: the original 33 tests plus the new ones all pass.
-3. `python tests/smoke_mcp.py`: over stdio, lists the tools and calls `negotiation_brief` on a sample SKU. Check the result: it has the SAMPLE banner, the target is ≤ every reference, the counter packages reach the target when recomputed, and the walk-away is PROPOSED.
-4. Point `NEGOTIATION_DATA_DIR` at a copy of the templates with a few hand-entered rows, and confirm that loading works and that validation errors name the row and field.
-5. `python scripts/build_warehouse.py`, then open the SQLite file and check that each view's row totals match the kernel's output (a parity test in `tests/test_warehouse.py`).
-6. Start the dashboard, load every page with Playwright (Chromium is preinstalled), take screenshots, and check that the `/api/*` JSON matches the MCP output.
-7. Docker isn't available here, so the Metabase compose file can't be run in this session. I'll validate it statically and document the steps.
-8. Commit and push to `claude/jolly-faraday-8ohsv6` (no PR unless you ask).
+### The app
+
+```bash
+python -m negotiation_mcp.dashboard --port 8080 --breakage 0.10
+```
+
+A read-only web app on 127.0.0.1 that makes no external requests, so it works on a
+hospital intranet. It shows one thing at a time on purpose:
+
+1. **Welcome**: how to use it, then **Get started**.
+2. **Conversation**: the assistant asks one question: *ask me anything, or see the
+   Renewal Calendar & Risk Alerts?*
+   - **Ask me anything**: a two-field form, **Target clinical SKU** and **Vendor**
+     (pick from the list or type). It answers with the latest price and **three price
+     options**: Stretch (open here), Target (beats every price on record) and Fallback
+     (matches the best price on record). Then:
+     - **Negotiate** gives a four-step plan: the opening ask and a line to say, what
+       to trade if they push back (rebuilt from the vendor's current deal), your
+       leverage, and the walk-away. Name an approver to get accept / push / walk.
+     - **See details** explains the evidence in one sentence, then shows a sorted
+       bar chart. Every price on record, today's price, your asks and the walk-away
+       get one bar each, cheapest first and starting at zero, with a dashed line at
+       the target, so you can see that everything on record costs more. Below it are a
+       table view and what each hospital pays.
+   - **Renewal Calendar & Risk Alerts**: contracts ending in 30–90 days on a month
+     calendar. Each renewal is one row that expands to its targets, volume leverage
+     and risks, with the high-severity risk alerts below.
+
+The full analytics views (overview, SKU explorer, vendor scorecard, alerts) are still
+at `/analytics`, one link away rather than on the first screen.
+
+Colours: Cobalt Pulse `#0c21a4` for actions and your asks, Blue Breeze `#b8c7f8` for the
+assistant and prices on record, Spring Field `#d4d67d` for savings and highlights, Soft Cloud `#fffafd`
+as the base, and Sunset Pop `#ff891f` only as a small dot for urgent dates and the
+walk-away.
+
+### Metabase / Apache Superset
+
+```bash
+python scripts/build_warehouse.py --breakage 0.10     # -> data/warehouse.db (SQLite)
+```
+
+The `mart_*` tables are written by the same functions the tools call, so BI
+dashboards and Claude always agree. `deploy/docker-compose.yml` runs the warehouse
+build, the built-in dashboard and the official Metabase image together. Connection
+steps for Metabase and Superset are in `deploy/SUPERSET.md`.
+
+## Tests
+
+```bash
+python scripts/generate_sample_data.py   # only needed if data/sample/ is missing
+python -m pytest tests/ -q               # 85 tests
+python tests/smoke_mcp.py                # end-to-end over stdio
+```
+
+The unit tests recompute the scenario from `Procurement_Negotiation_Engine_v0.xlsx`,
+whose figures were independently verified, so the kernel and the workbook cannot
+silently diverge.
+
+## Layout
+
+```
+negotiation_mcp/
+  engine.py         pure calculation kernel — no MCP, no I/O, fully unit-testable
+  pricebook.py      CSV loading, validation, UoM and inflation normalisation
+  intelligence.py   benchmarks, targets, beat-check, counter-offer, alerts — pure
+  warehouse.py      SQLite marts for Metabase / Superset
+  formatting.py     shared markdown/JSON formatting
+  server.py         FastMCP tools, Pydantic validation, annotations
+  dashboard/        read-only Starlette app: two-page assistant (chat.js) + /analytics
+scripts/
+  generate_sample_data.py   deterministic synthetic price book
+  build_warehouse.py        builds data/warehouse.db
+data/
+  sample/           synthetic price book (marked SAMPLE_DATA)
+  templates/        header-only CSVs describing the export
+deploy/
+  docker-compose.yml, SUPERSET.md
+tests/
+  test_engine.py        33 tests including workbook parity
+  test_pricebook.py     loading, validation, UoM, index
+  test_intelligence.py  targets beat every reference; counter-offers recompute through ENUC
+  test_warehouse.py     warehouse parity with the kernel
+  test_dashboard.py     API parity, JSON safety, read-only
+  smoke_mcp.py          end-to-end client over stdio
+evaluation.xml      16 evaluation questions
+```
+
+The kernel is deliberately separable: a vendor building the full product can take
+`engine.py` unchanged and wrap it in a REST API, a batch job, or a UI.
+
+## Not in scope
+
+Approval workflow routing, three-way matching, SLA tracking, ticketing. External
+market price feeds: the engine benchmarks against Siloam's own history and the
+vendors that quote to Siloam, not against other hospital groups. Those are 12
+of the 34 catalogue gaps and they are platform work. This server advises; it does not
+route, approve, or write to any system of record.
