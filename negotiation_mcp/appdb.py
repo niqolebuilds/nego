@@ -74,7 +74,10 @@ def db_path():
 
 @contextmanager
 def connect() -> Iterator[sqlite3.Connection]:
-    con = sqlite3.connect(db_path())
+    path = db_path()
+    if not path.exists():
+        _create(path)
+    con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     try:
@@ -84,8 +87,17 @@ def connect() -> Iterator[sqlite3.Connection]:
         con.close()
 
 
+def _create(path) -> None:
+    con = sqlite3.connect(path)
+    try:
+        con.executescript(SCHEMA)
+        con.commit()
+    finally:
+        con.close()
+
+
 def init() -> None:
-    """Create tables, and the first admin if there are no users yet."""
+    """Create tables, and the first admin if there are no users yet. Safe to call again."""
     with connect() as con:
         con.executescript(SCHEMA)
         if not con.execute("SELECT 1 FROM users LIMIT 1").fetchone():

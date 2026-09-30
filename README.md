@@ -204,38 +204,90 @@ built on it starts with a `SAMPLE DATA` banner.
 ### The app
 
 ```bash
-python -m negotiation_mcp.dashboard --port 8080 --breakage 0.10
+NEGO_ADMIN_EMAIL=you@siloamhospitals.com python -m negotiation_mcp.dashboard --port 8080
 ```
 
-A read-only web app on 127.0.0.1 that makes no external requests, so it works on a
-hospital intranet. It shows one thing at a time on purpose:
+It's a web app on 127.0.0.1 that makes no external requests, so it works on a hospital intranet.
 
-1. **Welcome**: how to use it, then **Get started**.
-2. **Conversation**: the assistant asks one question: *ask me anything, or see the
-   Renewal Calendar & Risk Alerts?*
-   - **Ask me anything**: a two-field form, **Target clinical SKU** and **Vendor**
-     (pick from the list or type). It answers with the latest price and **three price
-     options**: Stretch (open here), Target (beats every price on record) and Fallback
-     (matches the best price on record). Then:
-     - **Negotiate** gives a four-step plan: the opening ask and a line to say, what
-       to trade if they push back (rebuilt from the vendor's current deal), your
-       leverage, and the walk-away. Name an approver to get accept / push / walk.
-     - **See details** explains the evidence in one sentence, then shows a sorted
-       bar chart. Every price on record, today's price, your asks and the walk-away
-       get one bar each, cheapest first and starting at zero, with a dashed line at
-       the target, so you can see that everything on record costs more. Below it are a
-       table view and what each hospital pays.
-   - **Renewal Calendar & Risk Alerts**: contracts ending in 30–90 days on a month
-     calendar. Each renewal is one row that expands to its targets, volume leverage
-     and risks, with the high-severity risk alerts below.
+**Signing in and roles**
+- **Getting in:** *Get started* leads to **Sign in**. Only registered users get in, and admins
+  invite them; there's no self sign-up. On first run the app creates one admin from
+  `NEGO_ADMIN_EMAIL`, or `admin@example.com` if that isn't set.
+- **Viewers** can see everything and update renewal progress.
+- **Admins** can also:
+  - upload price lists, records and documents
+  - roll data back
+  - tune the engine
+  - manage users
+  - read the activity log
+- **The server enforces this on every request**, not just the page:
+  - `/api` needs a session;
+  - `/api/admin` needs the admin role;
+  - writes need the app's own header.
+- **Sessions** are random IDs in an HMAC-signed, HttpOnly, SameSite=Strict cookie that lasts
+  12 hours. Set `NEGO_SECRET`, or one is generated in the workspace.
+- **Passwords aren't checked yet.** Sign-in is a *development* stand-in that accepts any
+  registered, active email, and the sign-in page says so. Real authentication plugs into
+  `dashboard/auth.py` (replace `DevSignIn`, e.g. Microsoft Entra ID SSO). Roles, sessions
+  and checks stay as they are.
 
-The full analytics views (overview, SKU explorer, vendor scorecard, alerts) are still
-at `/analytics`, one link away rather than on the first screen.
+**Assistant**
+- **Two ways to ask:**
+  - **type a question** in the bar, e.g. "best price for ceftri from medisindo",
+    "renewals in the next 60 days", "where can we save", "how much do we spend with Sehat";
+  - **use the buttons**: *Ask me anything*, *Renewal calendar*, *Risk alerts*, *Where to save*.
+- **The answers:**
+  - **three price options:** Stretch, Target and Fallback;
+  - **Negotiate**, which you can copy as text or print;
+  - **See details**, a sorted price bar chart with a target line;
+  - vendor profiles, spend, price look-ups and savings.
+- **How typed questions are read:** a built-in, offline, typo-tolerant parser (`nlu.py`)
+  asks when something is missing ("Which vendor?"). It only routes; the engine computes every
+  number.
 
-Colours: Cobalt Pulse `#0c21a4` for actions and your asks, Blue Breeze `#b8c7f8` for the
-assistant and prices on record, Spring Field `#d4d67d` for savings and highlights, Soft Cloud `#fffafd`
-as the base, and Sunset Pop `#ff891f` only as a small dot for urgent dates and the
-walk-away.
+**Renewals**
+- A board with one column per stage (*Not started → Preparing → In negotiation → Offer
+  received → Agreed / Escalated / Lost*). Drag a card, or use its stage menu.
+- **Open a renewal to:**
+  - set the owner, next step and due date
+  - log the vendor's offer (it says where the offer lands and the next move)
+  - record the agreed price
+  - add notes
+  - see its timeline and documents
+- Agreed prices add up to **saving realised**.
+
+**Admin**
+- **Price data:** upload a CSV or Excel file, see a row-checked preview, then *add* or
+  *replace*. Every apply is a new version with one-click rollback.
+- **Documents:** PDF, Word, Excel, CSV or image files, linked to a vendor, product or renewal.
+- **Engine settings:** margins, WACC, rebate breakage (D-18), the renewal window and alert
+  thresholds. They're shared with the MCP server.
+- **Users and Activity.**
+
+Everything the app writes (users, sessions, progress, uploads, versions, documents,
+settings) lives in one folder, `data/workspace/` (gitignored; `NEGO_HOME` moves it). Back up
+that folder.
+
+The full analytics views are at `/analytics` (signed in).
+
+**Colours:**
+- Cobalt Pulse `#0c21a4`: actions and your asks
+- Blue Breeze `#b8c7f8`: the assistant and prices on record
+- Spring Field `#d4d67d`: savings and highlights
+- Soft Cloud `#fffafd`: the base
+- Sunset Pop `#ff891f`: only a small dot for urgent dates and the walk-away
+
+### Does it use an LLM?
+
+No. The engine is deterministic arithmetic, so the same data always gives the same prices,
+and the web app runs with no LLM at all. Claude comes in only as a *user* of the engine, when
+you connect the MCP server to Claude Desktop.
+
+The roadmap adds an LLM around the engine, never inside the price maths:
+- a Claude fallback for questions the parser can't read (the admin switch exists; it isn't
+  connected yet);
+- drafting negotiation emails;
+- reading prices from uploaded PDF contracts into a review queue that an admin approves.
 
 ### Metabase / Apache Superset
 
@@ -252,7 +304,7 @@ steps for Metabase and Superset are in `deploy/SUPERSET.md`.
 
 ```bash
 python scripts/generate_sample_data.py   # only needed if data/sample/ is missing
-python -m pytest tests/ -q               # 85 tests
+python -m pytest tests/ -q               # the full suite
 python tests/smoke_mcp.py                # end-to-end over stdio
 ```
 
@@ -270,7 +322,11 @@ negotiation_mcp/
   warehouse.py      SQLite marts for Metabase / Superset
   formatting.py     shared markdown/JSON formatting
   server.py         FastMCP tools, Pydantic validation, annotations
-  dashboard/        read-only Starlette app: two-page assistant (chat.js) + /analytics
+  appdb.py          users, sessions, renewal progress, uploads, documents, audit (SQLite)
+  datastore.py      admin uploads: validate, preview, versioned apply, rollback
+  settings.py       admin-tunable engine settings, shared with the MCP server
+  nlu.py            offline parser for the chat bar
+  dashboard/        Starlette app: auth.py, admin.py, app.py; static/ shell, chat, renewals, admin
 scripts/
   generate_sample_data.py   deterministic synthetic price book
   build_warehouse.py        builds data/warehouse.db

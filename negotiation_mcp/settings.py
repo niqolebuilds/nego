@@ -44,9 +44,9 @@ class Setting:
 
 SETTINGS: tuple[Setting, ...] = (
     Setting("beat_margin", "How far the target sits below the best price on record", "Targets", 0.01, "fraction", 0, 0.5,
-            "0.01 = 1% below the lowest reference."),
+            "1% = the target sits 1% under the lowest price on record."),
     Setting("anchor_margin", "How far the opening ask sits below the target", "Targets", 0.05, "fraction", 0, 0.5,
-            "0.05 = open 5% below target."),
+            "5% = open 5% under the target."),
     Setting("lookback_months", "How far back a vendor's own best price counts", "Targets", 24, "int", 3, 120),
     Setting("wacc", "Cost of capital (WACC)", "Money", 0.12, "fraction", 0, 0.99,
             "Values payment terms and rebate lag. Confirm with Treasury (D-17)."),

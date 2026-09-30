@@ -199,7 +199,10 @@ async def api_catalog(_: Request) -> Response:
         skus.append({"sku": s.sku, "sku_name": s.sku_name, "equivalence_group": s.equivalence_group,
                      "vendors": sorted(supplied.get(s.sku, ())), "group_vendors": group_vendors,
                      "single_source": s.single_source})
+    v = cfg()
     return ok({"skus": skus, "vendors": sorted({o.vendor for o in book.observations}),
+               "hospitals": sorted({o.hospital for o in book.observations}),
+               "renewal_window": [v["renewal_min_days"], v["renewal_max_days"]],
                "as_of": book.latest_date.isoformat(), "is_sample": book.is_sample,
                "banner": SAMPLE_BANNER if book.is_sample else None, "currency": book.currency})
 
