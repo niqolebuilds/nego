@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import csv
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
+
+# Every test run gets its own workspace (settings, app.db, versions, documents), so tests
+# never read or write a real one. Set before any app module computes a path.
+os.environ["NEGO_HOME"] = tempfile.mkdtemp(prefix="nego-test-")
+os.environ.pop("NEGOTIATION_DATA_DIR", None)
 
 from negotiation_mcp.pricebook import PRICE_HISTORY_COLUMNS, PriceBook
 

@@ -1,10 +1,11 @@
-"""Starlette app serving the dashboard and its JSON API.
+"""Starlette app serving the negotiation app and its JSON API.
 
-Every endpoint calls the same ``intelligence`` functions as the MCP tools, so the
-dashboard and Claude always quote the same numbers. Read-only: there is no write
-endpoint, and it binds to 127.0.0.1 unless told otherwise.
+Every endpoint calls the same ``intelligence`` functions as the MCP tools, so the app
+and Claude always quote the same numbers. All ``/api`` routes need a signed-in user;
+``/api/admin`` routes need an admin (see ``auth.py``). Engine settings come from the
+admin-managed settings file. It binds to 127.0.0.1 unless told otherwise.
 
-    python -m negotiation_mcp.dashboard [--host 127.0.0.1] [--port 8080] [--breakage 0.10]
+    python -m negotiation_mcp.dashboard [--host 127.0.0.1] [--port 8080]
 """
 
 from __future__ import annotations
@@ -21,11 +22,16 @@ from starlette.responses import FileResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from starlette.middleware import Middleware
+
+from .. import appdb, nlu
 from .. import engine as E
 from .. import intelligence as I
+from .. import settings as S
 from ..formatting import to_json
 from ..pricebook import SAMPLE_BANNER
 from ..pricebook import cached_book as get_book
+from . import auth
 
 STATIC = Path(__file__).resolve().parent / "static"
 STATE: dict[str, Any] = {"breakage": None}
@@ -50,8 +56,21 @@ def fail(e: Exception, status: int = 400) -> Response:
     return Response(json.dumps({"error": str(e)}), status_code=status, media_type="application/json")
 
 
+def cfg() -> dict:
+    """Admin-managed engine settings. A --breakage flag on the command line fills D-18 if unset."""
+    values = S.load()
+    if values["rebate_breakage_rate"] is None and STATE["breakage"] is not None:
+        values["rebate_breakage_rate"] = STATE["breakage"]
+    return values
+
+
 def params() -> E.Parameters:
-    return E.Parameters(rebate_breakage_rate=STATE["breakage"])
+    return S.parameters(cfg())
+
+
+def alert_kwargs(v: dict | None = None) -> dict:
+    v = v or cfg()
+    return {"creep_threshold": v["creep_threshold"], "variance_threshold": v["variance_threshold"]}
 
 
 async def index(_: Request) -> Response:
@@ -75,7 +94,7 @@ async def api_overview(_: Request) -> Response:
         book = get_book()
         opps = I.savings_opportunities(book, top_n=0)
         vendors = I.vendor_spend(book)
-        alerts = I.alerts(book, params=params())
+        alerts = I.alerts(book, params=params(), **alert_kwargs())
         spend = sum(v["spend_12m"] for v in vendors)
         identified = sum(r["total_opportunity"] for r in opps)
         internal = sum(r["internal_price_variance"] for r in opps)
@@ -129,7 +148,7 @@ async def api_vendors(_: Request) -> Response:
 
 
 async def api_alerts(_: Request) -> Response:
-    return ok(I.alerts(get_book(), params=params()))
+    return ok(I.alerts(get_book(), params=params(), **alert_kwargs()))
 
 
 async def api_brief(request: Request) -> Response:
@@ -137,8 +156,9 @@ async def api_brief(request: Request) -> Response:
     try:
         if not q.get("sku") or not q.get("vendor"):
             raise E.EngineError("sku and vendor are required")
-        res = I.negotiation_brief(get_book(), q["sku"], q["vendor"], params(),
-                                  reservation_approved_by=q.get("approved_by") or None)
+        v = cfg()
+        res = I.negotiation_brief(get_book(), q["sku"], q["vendor"], params(), beat_margin=v["beat_margin"],
+                                  anchor_margin=v["anchor_margin"], reservation_approved_by=q.get("approved_by") or None)
         return ok(res)
     except E.EngineError as e:
         return fail(e)
@@ -149,7 +169,9 @@ def _brief(q, with_offer: bool) -> dict:
         raise E.EngineError("Choose a target clinical SKU and a vendor")
     book = get_book()
     offer = I.offer_from_history(book, q["sku"], q["vendor"]) if with_offer else None
-    res = I.negotiation_brief(book, q["sku"], q["vendor"], params(), offer=offer,
+    v = cfg()
+    res = I.negotiation_brief(book, q["sku"], q["vendor"], S.parameters(v), offer=offer,
+                              beat_margin=v["beat_margin"], anchor_margin=v["anchor_margin"],
                               reservation_approved_by=q.get("approved_by") or None)
     res["offer_from_history"] = offer is not None
     if offer is not None:
@@ -198,25 +220,220 @@ async def api_negotiate(request: Request) -> Response:
         return fail(e)
 
 
+def _calendar(lo: int, hi: int) -> dict:
+    v = cfg()
+    cal = I.renewal_calendar(get_book(), min_days=lo, max_days=hi, params=S.parameters(v),
+                             beat_margin=v["beat_margin"], anchor_margin=v["anchor_margin"], alert_kwargs=alert_kwargs(v))
+    progress = appdb.all_progress()
+    for r in cal["renewals"]:
+        p = progress.get(r["key"]) or {"stage": "not_started"}
+        r["progress"] = p
+        if p.get("latest_offer"):
+            r["offer_check"] = I.assess_offer(p["latest_offer"], r["target_price"], r["fallback_price"],
+                                              r["proposed_walk_away"], r["opening_ask"])
+        if p.get("stage") == "agreed" and p.get("agreed_price"):
+            r["realised_saving"] = (r["contract_price_per_clinical_unit"] - p["agreed_price"]) * r["site_annual_units"]
+    return cal
+
+
 async def api_renewals(request: Request) -> Response:
     q = request.query_params
     try:
-        lo, hi = int(q.get("min_days", 30)), int(q.get("max_days", 90))
-        return ok(I.renewal_calendar(get_book(), min_days=lo, max_days=hi, params=params()))
+        v = cfg()
+        lo = int(q.get("min_days", v["renewal_min_days"]))
+        hi = int(q.get("max_days", v["renewal_max_days"]))
+        return ok(_calendar(lo, hi))
     except (ValueError, E.EngineError) as e:
         return fail(e)
 
 
+def _pipeline_kpis(renewals: list[dict]) -> dict:
+    agreed = [r for r in renewals if r["progress"].get("stage") == "agreed"]
+    open_ = [r for r in renewals if r["progress"].get("stage") not in ("agreed", "lost")]
+    return {
+        "open": len(open_),
+        "pipeline_value": sum(r["contract_value"] for r in open_),
+        "saving_at_target": sum(r["saving_at_target"] for r in open_),
+        "realised_saving": sum(r.get("realised_saving", 0.0) or 0.0 for r in agreed),
+        "agreed": len(agreed),
+        "by_stage": {k: sum(1 for r in renewals if r["progress"].get("stage", "not_started") == k)
+                     for k in appdb.STAGE_KEYS},
+    }
+
+
+async def api_pipeline(request: Request) -> Response:
+    """Board view: every contract ending in the window, with its stage and progress."""
+    q = request.query_params
+    try:
+        lo, hi = int(q.get("min_days", 0)), int(q.get("max_days", 180))
+        cal = _calendar(lo, hi)
+        mine = q.get("mine") == "1"
+        if mine:
+            me = request.state.user["email"]
+            cal["renewals"] = [r for r in cal["renewals"] if (r["progress"].get("owner") or "").lower() == me]
+        cal["kpis"] = _pipeline_kpis(cal["renewals"])
+        cal["stages"] = [{"key": k, "label": label} for k, label in appdb.STAGES]
+        return ok(cal)
+    except (ValueError, E.EngineError) as e:
+        return fail(e)
+
+
+async def api_progress(request: Request) -> Response:
+    """Update one renewal's stage, owner, next step, notes or prices. Any signed-in user."""
+    try:
+        body = await request.json()
+        key = body.pop("key", None)
+        cal = _calendar(0, 3650)
+        renewal = next((r for r in cal["renewals"] if r["key"] == key), None)
+        if renewal is None:
+            raise E.EngineError("That renewal isn't in the current data")
+        progress, events = appdb.update_progress(key, body, request.state.user["email"])
+        out = {"progress": progress, "events": events}
+        if progress.get("latest_offer"):
+            out["offer_check"] = I.assess_offer(progress["latest_offer"], renewal["target_price"], renewal["fallback_price"],
+                                                renewal["proposed_walk_away"], renewal["opening_ask"])
+        return ok(out)
+    except (ValueError, E.EngineError) as e:
+        return fail(e)
+
+
+async def api_events(request: Request) -> Response:
+    return ok(appdb.events(request.query_params.get("key", "")))
+
+
+async def api_home(request: Request) -> Response:
+    """Greeting strip: my renewals due soon, high alerts, savings realised."""
+    me = request.state.user["email"]
+    cal = _calendar(0, 3650)
+    mine_soon = [r for r in cal["renewals"] if (r["progress"].get("owner") or "").lower() == me and r["days_left"] <= 14]
+    due_soon = [r for r in cal["renewals"] if r["days_left"] <= 30 and r["progress"].get("stage") not in ("agreed", "lost")]
+    high = [a for a in I.alerts(get_book(), params=params(), **alert_kwargs()) if a["severity"] == "high"]
+    return ok({
+        "user": auth.public_user(request.state.user),
+        "my_due_14d": len(mine_soon),
+        "due_30d_open": len(due_soon),
+        "high_alerts": len(high),
+        "realised_saving": sum(r.get("realised_saving", 0.0) or 0.0 for r in cal["renewals"]),
+    })
+
+
+async def api_vendor(request: Request) -> Response:
+    try:
+        return ok(I.vendor_profile(get_book(), request.path_params["name"], params=params()))
+    except E.EngineError as e:
+        return fail(e, 404)
+
+
+async def api_lookup(request: Request) -> Response:
+    q = request.query_params
+    try:
+        return ok(I.lookup(get_book(), text=q.get("text") or None, vendor=q.get("vendor") or None,
+                           hospital=q.get("hospital") or None, limit=30))
+    except E.EngineError as e:
+        return fail(e, 404)
+
+
+async def api_savings(_: Request) -> Response:
+    book = get_book()
+    return ok({"rows": I.savings_opportunities(book, top_n=8), "currency": book.currency})
+
+
+async def api_chat(request: Request) -> Response:
+    """Free text in, a structured intent out. The page then calls the matching endpoint."""
+    try:
+        body = await request.json()
+        text = str(body.get("text", ""))[:500]
+        parsed = nlu.parse(text, nlu.catalog_from_book(get_book())).as_dict()
+        v = cfg()
+        parsed["llm_fallback"] = {
+            "enabled": bool(v["llm_fallback"]),
+            "available": False,
+            "note": "Claude fallback is on the roadmap; answers come from the built-in parser.",
+        }
+        return ok(parsed)
+    except (ValueError, E.EngineError) as e:
+        return fail(e)
+
+
+async def api_settings(_: Request) -> Response:
+    """Everyone can see how the engine is configured; only admins can change it."""
+    return ok({"settings": S.describe()})
+
+
+async def api_documents(request: Request) -> Response:
+    q = request.query_params
+    return ok(appdb.list_documents(q.get("vendor") or None, q.get("sku") or None, q.get("renewal") or None,
+                                   q.get("text") or None))
+
+
+async def api_document_download(request: Request) -> Response:
+    from .admin import document_response
+
+    return document_response(request.path_params["doc_id"])
+
+
+# ---------------------------------------------------------------- sign-in
+
+async def signin(request: Request) -> Response:
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    user = auth.PROVIDER.authenticate(str(body.get("email", "")), body.get("password"))
+    if not user:
+        appdb.audit(str(body.get("email", ""))[:200] or "unknown", "signin.failed")
+        return fail(E.EngineError("That email isn't registered, or the account is disabled. Ask an admin to invite you."), 401)
+    sid = appdb.create_session(user["id"])
+    appdb.audit(user["email"], "signin")
+    resp = ok({"user": auth.public_user(user)})
+    auth.set_session_cookie(resp, request, sid)
+    return resp
+
+
+async def signout(request: Request) -> Response:
+    sid = auth.unsign(request.cookies.get(auth.COOKIE))
+    if sid:
+        appdb.delete_session(sid)
+    resp = ok({"ok": True})
+    auth.clear_session_cookie(resp)
+    return resp
+
+
+async def me(request: Request) -> Response:
+    user = request.state.user
+    return ok({"user": auth.public_user(user) if user else None,
+               "provider": {"name": auth.PROVIDER.name, "password_required": auth.PROVIDER.password_required,
+                            "notice": auth.PROVIDER.notice}})
+
+
 def create_app(breakage: float | None = None) -> Starlette:
+    from . import admin
+
     STATE["breakage"] = breakage
+    appdb.init()
     return Starlette(
+        middleware=[Middleware(auth.AuthMiddleware)],
         routes=[
             Route("/", index),
             Route("/analytics", analytics),
+            Route("/api/auth/signin", signin, methods=["POST"]),
+            Route("/api/auth/signout", signout, methods=["POST"]),
+            Route("/api/auth/me", me),
+            Route("/api/home", api_home),
+            Route("/api/chat", api_chat, methods=["POST"]),
             Route("/api/catalog", api_catalog),
             Route("/api/options", api_options),
             Route("/api/negotiate", api_negotiate),
             Route("/api/renewals", api_renewals),
+            Route("/api/pipeline", api_pipeline),
+            Route("/api/renewals/progress", api_progress, methods=["PATCH"]),
+            Route("/api/renewals/events", api_events),
+            Route("/api/vendor/{name}", api_vendor),
+            Route("/api/lookup", api_lookup),
+            Route("/api/savings", api_savings),
+            Route("/api/settings", api_settings),
+            Route("/api/documents", api_documents),
+            Route("/api/documents/{doc_id}/download", api_document_download),
             Route("/api/status", api_status),
             Route("/api/overview", api_overview),
             Route("/api/skus", api_skus),
@@ -224,18 +441,20 @@ def create_app(breakage: float | None = None) -> Starlette:
             Route("/api/vendors", api_vendors),
             Route("/api/alerts", api_alerts),
             Route("/api/brief", api_brief),
+            *admin.routes(),
             Mount("/static", StaticFiles(directory=STATIC), name="static"),
-        ]
+        ],
     )
 
 
 def main() -> None:
     import uvicorn
 
-    ap = argparse.ArgumentParser(description="Negotiation price-intelligence dashboard (read-only)")
+    ap = argparse.ArgumentParser(description="Negotiation intelligence web app")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8080)
-    ap.add_argument("--breakage", type=float, default=None, help="Rebate breakage rate (D-18) for rebate alerts")
+    ap.add_argument("--breakage", type=float, default=None,
+                    help="Rebate breakage rate (D-18) if not set in the admin settings")
     args = ap.parse_args()
     uvicorn.run(create_app(args.breakage), host=args.host, port=args.port, log_level="info")
 

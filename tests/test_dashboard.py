@@ -11,7 +11,9 @@ from negotiation_mcp.dashboard.app import create_app
 
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(create_app(breakage=0.10))
+    c = TestClient(create_app(breakage=0.10))
+    assert c.post("/api/auth/signin", json={"email": "admin@example.com"}, headers={"X-Requested-With": "nego"}).status_code == 200
+    return c
 
 
 def test_two_page_app_and_analytics(client):
@@ -47,8 +49,8 @@ def test_sku_endpoint_and_errors(client):
     assert client.get("/api/brief").status_code == 400
 
 
-def test_no_write_methods(client):
-    assert client.post("/api/brief").status_code == 405
+def test_read_only_routes_reject_writes(client):
+    assert client.post("/api/brief", headers={"X-Requested-With": "nego"}).status_code == 405
 
 
 def test_catalog_lists_suppliers_and_competitors(client):
@@ -89,3 +91,16 @@ def test_renewal_window(client):
 
 def test_options_need_both_fields(client):
     assert client.get("/api/options", params={"sku": "IVC22-PRI"}).status_code == 400
+
+
+def test_chat_endpoint_parses_free_text(client):
+    d = client.post("/api/chat", json={"text": "best price for ceftri from medisindo"}, headers={"X-Requested-With": "nego"}).json()
+    assert (d["intent"], d["sku"], d["vendor"]) == ("options", "CEF1G-MED", "Medisindo")
+    assert d["llm_fallback"]["available"] is False
+
+
+def test_vendor_profile_lookup_and_home(client):
+    v = client.get("/api/vendor/medisindo").json()
+    assert v["vendor"] == "Medisindo" and v["products"]
+    assert client.get("/api/lookup", params={"text": "ceftriaxone"}).json()["rows"]
+    assert "high_alerts" in client.get("/api/home").json()

@@ -1070,12 +1070,20 @@ def offer_from_history(book: PriceBook, sku_query: str, vendor_query: str, as_of
     )
 
 
+def renewal_key(hospital: str, vendor: str, sku: str, contract_end: str) -> str:
+    """Stable identifier for one contract renewal, used to track its progress."""
+    return f"{hospital}|{vendor}|{sku}|{contract_end}"
+
+
 def renewal_calendar(
     book: PriceBook,
     as_of: date | None = None,
     min_days: int = 30,
     max_days: int = 90,
     params: E.Parameters | None = None,
+    beat_margin: float = 0.01,
+    anchor_margin: float = 0.05,
+    alert_kwargs: dict | None = None,
 ) -> dict:
     """Contracts ending in the window, each with targets and volume leverage ready.
 
@@ -1092,7 +1100,7 @@ def renewal_calendar(
         if key not in latest or c.date > latest[key].date:
             latest[key] = c
 
-    risk = alerts(book, as_of, params)
+    risk = alerts(book, as_of, params, **(alert_kwargs or {}))
     renewals = []
     target_cache: dict[tuple, TargetRecommendation] = {}
     for c in latest.values():
@@ -1102,7 +1110,7 @@ def renewal_calendar(
         if not min_days <= days <= max_days:
             continue
         if (c.sku, c.vendor) not in target_cache:
-            target_cache[(c.sku, c.vendor)] = recommend_targets(book, c.sku, c.vendor, as_of)
+            target_cache[(c.sku, c.vendor)] = recommend_targets(book, c.sku, c.vendor, as_of, beat_margin, anchor_margin)
         rec = target_cache[(c.sku, c.vendor)]
         site_units = c.clinical_units
         group_units = rec.annual_volume
@@ -1111,6 +1119,7 @@ def renewal_calendar(
                    and (a["hospital"] in (None, c.hospital) or a["sku"] == c.sku)]
         renewals.append(
             {
+                "key": renewal_key(c.hospital, c.vendor, c.sku, c.contract_end.isoformat()),
                 "contract_end": c.contract_end.isoformat(),
                 "days_left": days,
                 "hospital": c.hospital,
@@ -1118,10 +1127,12 @@ def renewal_calendar(
                 "sku": c.sku,
                 "sku_name": c.sku_name,
                 "quoted_unit": c.uom.quoted_unit,
+                "clinical_units_per_quoted_unit": c.uom.clinical_units_per_quoted_unit,
                 "contract_value": c.spend,
                 "contract_price_per_clinical_unit": site_price,
                 "target_price": rec.target_price,
                 "opening_ask": rec.opening_ask,
+                "fallback_price": rec.lowest_reference.price,
                 "proposed_walk_away": rec.proposed_walk_away,
                 "saving_at_target": max(0.0, site_price - rec.target_price) * site_units,
                 "site_annual_units": site_units,
@@ -1146,6 +1157,46 @@ def renewal_calendar(
         "currency": book.currency,
         "is_sample": book.is_sample,
     }
+
+
+def assess_offer(
+    offer_price: float,
+    target_price: float,
+    fallback_price: float,
+    walk_away: float,
+    opening_ask: float | None = None,
+) -> dict:
+    """Which zone a vendor's offer lands in, and the next move. Prices per clinical unit."""
+    if offer_price <= 0:
+        raise EngineError("The offer price must be positive")
+    vs_target = offer_price / target_price - 1.0
+    if opening_ask is not None and offer_price <= opening_ask:
+        zone, move = "below_stretch", "Better than your opening ask. Confirm the terms in writing and close."
+    elif offer_price <= target_price:
+        zone, move = "at_target", "At or below target. Close it, and lock the price for the whole group."
+    elif offer_price <= fallback_price:
+        zone, move = "near_target", ("Between target and the best price on record. Push once more with a trade: "
+                                     "longer payment terms or bonus stock, not more volume.")
+    elif offer_price <= walk_away:
+        zone, move = "push", ("Above the best price anyone has had. Push: name the competitor's price and the "
+                              "group volume, and don't concede anything yet.")
+    else:
+        zone, move = "walk", "Above the walk-away. Stop and escalate, or prepare a re-tender."
+    return {"zone": zone, "move": move, "vs_target_pct": vs_target, "gap_to_target": offer_price - target_price}
+
+
+def vendor_profile(book: PriceBook, vendor_query: str, as_of: date | None = None, params: E.Parameters | None = None) -> dict:
+    """One vendor at a glance: spend, products and prices, and open risks."""
+    vendor = book.resolve_vendor(vendor_query)
+    as_of = book.resolve_as_of(as_of)
+    spend = next((v for v in vendor_spend(book, as_of) if v["vendor"] == vendor), None)
+    if spend is None and not any(o.vendor == vendor for o in book.observations):
+        raise EngineError(f"No history for a vendor called '{vendor_query}'")
+    products = lookup(book, vendor=vendor, limit=100)["rows"]
+    products = [p for p in products if p["vendor"] == vendor]
+    risk = [a for a in alerts(book, as_of, params) if a["vendor"] and vendor in a["vendor"]]
+    return {"vendor": vendor, "spend": spend, "products": products, "alerts": risk[:10],
+            "currency": book.currency, "is_sample": book.is_sample}
 
 
 # --------------------------------------------------------------------------

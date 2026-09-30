@@ -22,10 +22,11 @@ from datetime import date
 from typing import Any, Literal, Optional
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import engine as E
 from . import intelligence as I
+from . import settings as S
 from .formatting import (
     ResponseFormat,
     alerts_markdown,
@@ -63,9 +64,28 @@ class StrictModel(BaseModel):
     )
 
 
+def _settings_defaults(keys: tuple[str, ...]):
+    """Fill fields the caller left out from the admin-managed settings, so the MCP server
+    and the web app use the same configuration. Explicit values always win."""
+
+    def fill(cls, data):
+        if isinstance(data, dict):
+            stored = S.load()
+            for k in keys:
+                if k not in data and stored.get(k) != S.BY_KEY[k].default:
+                    data = {**data, k: stored[k]}
+        return data
+
+    return model_validator(mode="before")(classmethod(fill))
+
+
 class ParametersInput(StrictModel):
     """Global assumptions. In production these resolve through the parameter
-    hierarchy (group to deal, most specific wins) with effective dating."""
+    hierarchy (group to deal, most specific wins) with effective dating.
+    Anything left out comes from the admin settings, then from these defaults."""
+
+    _from_settings = _settings_defaults(("wacc", "baseline_payment_days", "contract_years", "rebate_breakage_rate",
+                                         "rebate_collection_lag_months", "tax_efficiency_off_invoice"))
 
     wacc: float = Field(
         default=0.12, description="Annual cost of capital, as a fraction (0.12 = 12%)", ge=0, lt=1
@@ -938,6 +958,7 @@ async def negotiation_benchmark(params: BenchmarkInput) -> str:
 
 
 class TargetsInput(StrictModel):
+    _from_settings = _settings_defaults(("beat_margin", "anchor_margin"))
     sku: str = Field(..., description="SKU code or unique product-name fragment", min_length=1, max_length=200)
     vendor: str = Field(..., description="Vendor being negotiated with", min_length=1, max_length=200)
     beat_margin: float = Field(
@@ -1048,6 +1069,7 @@ async def negotiation_counter_offer(params: CounterInput) -> str:
 
 
 class BriefInput(StrictModel):
+    _from_settings = _settings_defaults(("beat_margin", "anchor_margin"))
     sku: str = Field(..., description="SKU code or unique product-name fragment", min_length=1, max_length=200)
     vendor: str = Field(..., description="Vendor being negotiated with", min_length=1, max_length=200)
     offer: Optional[OfferInput] = Field(

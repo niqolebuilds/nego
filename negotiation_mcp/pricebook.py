@@ -19,8 +19,9 @@ Files in the data directory
 A file named ``SAMPLE_DATA`` in the directory marks the data as synthetic, and
 every answer built on it says so.
 
-The directory is chosen by the ``NEGOTIATION_DATA_DIR`` environment variable and
-defaults to the bundled synthetic sample.
+The directory is chosen by ``active_data_dir()``: the ``NEGOTIATION_DATA_DIR``
+environment variable if set, else the data version an admin activated in the app,
+else the bundled synthetic sample.
 """
 
 from __future__ import annotations
@@ -503,11 +504,32 @@ class PriceBook:
 
 
 _CACHE: dict = {}
+ACTIVE_POINTER = "ACTIVE"
+
+
+def active_data_dir() -> Path:
+    """Which price data the app uses, in order of precedence.
+
+    1. ``NEGOTIATION_DATA_DIR``, when set: an explicit override always wins.
+    2. The version an admin activated in the workspace (``versions/<id>``).
+    3. The bundled synthetic sample.
+    """
+    if os.environ.get("NEGOTIATION_DATA_DIR"):
+        return Path(os.environ["NEGOTIATION_DATA_DIR"])
+    from .settings import workspace
+
+    pointer = workspace() / ACTIVE_POINTER
+    if pointer.exists():
+        version = pointer.read_text(encoding="utf-8").strip()
+        candidate = workspace() / "versions" / version
+        if version and (candidate / "price_history.csv").exists():
+            return candidate
+    return DEFAULT_DATA_DIR
 
 
 def cached_book() -> PriceBook:
-    """Load the price book once, and again only when the export on disk changes."""
-    directory = Path(os.environ.get("NEGOTIATION_DATA_DIR") or DEFAULT_DATA_DIR)
+    """Load the price book once, and again only when the active data changes."""
+    directory = active_data_dir()
     history = directory / "price_history.csv"
     stamp = (str(directory), history.stat().st_mtime if history.exists() else None)
     if _CACHE.get("stamp") != stamp:
