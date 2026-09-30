@@ -25,7 +25,7 @@ def test_rp(value, expected):
 
 @pytest.mark.parametrize(
     "value, expected",
-    [(5.36e9, "Rp 5,36 M"), (539.6e6, "Rp 539,6 jt"), (2.1e12, "Rp 2,10 T"), (12_700, "Rp 12,7 rb"), (950, "Rp 950")],
+    [(5.36e9, "Rp 5,36 Bn"), (539.6e6, "Rp 539,6 Mn"), (2.1e12, "Rp 2,10 Tn"), (12_700, "Rp 12,7 K"), (950, "Rp 950")],
 )
 def test_rp_compact(value, expected):
     assert rp_compact(value) == expected
@@ -33,7 +33,7 @@ def test_rp_compact(value, expected):
 
 def test_grouping_and_percent():
     assert num(1_234_567.891, 2) == "1.234.567,89"
-    assert compact(52_750) == "52,8 rb"
+    assert compact(52_750) == "52,8 K"
     assert pct(0.106, 1) == "10,6%"
 
 

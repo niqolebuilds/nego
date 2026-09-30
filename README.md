@@ -123,8 +123,8 @@ The elements the engine touches directly:
 ## Things worth knowing
 
 **Money is shown the Indonesian way.** Amounts read `Rp 9.905` (dot for thousands,
-whole rupiah) and large totals `Rp 5,36 M` (`rb` ribu, `jt` juta, `M` miliar, `T`
-triliun). Percentages use a decimal comma, `10,6%`. Amounts under Rp 100 keep two
+whole rupiah) and large totals `Rp 5,36 Bn` (`K` thousand, `Mn` million / juta,
+`Bn` billion / miliar, `Tn` trillion / triliun). Percentages use a decimal comma, `10,6%`. Amounts under Rp 100 keep two
 decimals so cheap per-unit prices stay comparable. This is display only: JSON output,
 CSV input and the warehouse carry raw numbers. Pass another `currency` and the output
 falls back to the international style.

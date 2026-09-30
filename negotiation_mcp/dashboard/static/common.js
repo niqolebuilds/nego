@@ -31,7 +31,7 @@ const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyV
 const isIDR = () => (state.currency || "IDR").toUpperCase() === "IDR";
 const nf = (d) => new Intl.NumberFormat(isIDR() ? "id-ID" : "en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = (v, d = 0) => (v == null ? "—" : nf(d).format(v));
-const SCALES = [[1e12, "T", 2], [1e9, "M", 2], [1e6, "jt", 1], [1e3, "rb", 1]];
+const SCALES = [[1e12, "Tn", 2], [1e9, "Bn", 2], [1e6, "Mn", 1], [1e3, "K", 1]];
 function compact(v) {
   if (v == null) return "—";
   for (const [size, word, d] of SCALES) if (Math.abs(v) >= size) return `${num(v / size, d)} ${word}`;
