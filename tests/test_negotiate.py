@@ -204,3 +204,11 @@ def test_routes(ws):
     v.post("/api/auth/signin", json={"email": "v@example.com"}, headers=H)
     assert v.get(f"/api/admin/nego/cycles/{c['id']}/documents/{docs[0]['id']}").status_code == 403
     assert v.post(f"/api/admin/nego/cycles/{c['id']}/co", json={}, headers=H).status_code == 403
+
+
+def test_feedback_needs_a_counter_offer(ws):
+    c = make_cycle(2)
+    with pytest.raises(Exception, match="counter offer first"):
+        service.set_step(c["id"], "feedback1", "a@x")
+    negotiate.apply_co(c["id"], "a@x")
+    assert service.set_step(c["id"], "feedback1", "a@x")["current_step"] == "feedback1"

@@ -4,3 +4,4 @@ starlette
 uvicorn
 openpyxl>=3.1
 cryptography>=41
+anthropic>=1.0  # optional: Claude drafting (Engine settings)

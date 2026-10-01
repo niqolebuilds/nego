@@ -58,3 +58,12 @@ def tiny_book(tmp_path) -> PriceBook:
 @pytest.fixture(scope="session")
 def sample_book() -> PriceBook:
     return PriceBook.load(ROOT / "data" / "sample")
+
+
+@pytest.fixture(autouse=True)
+def _reset_link_limits():
+    """The bad-link limiter is per process; each test starts clean."""
+    from negotiation_mcp.dashboard import portal_routes
+
+    portal_routes._fails.clear()
+    yield

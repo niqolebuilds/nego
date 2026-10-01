@@ -823,6 +823,30 @@ async function renderNegotiate(body) {
     card("6 · Online Nego", "After the meeting, record what was agreed. Start from the principal's Feedback I discount (else the counter offer) and edit items in the Items tab.", onBox),
     card("Submission package", "The agreed prices as Excel Confirmation and BAK draft (by binding), active items only, A–Z, no duplicate ERP codes. Company documents the principal sends at the last step are encrypted and only admins can open them.", pkBox));
   drawCO(coBox); drawBench(bmBox); drawOn(onBox, c); drawPackage(pkBox);
+  if (isAdmin()) { const aiBox = el("div"); put(body, card("Draft with Claude (optional)", "Claude writes, the engine computes. Drafts use only counts, your meeting notes and escalation totals, never the item price list, and you review every draft before using it.", aiBox)); drawAssist(aiBox); }
+}
+
+async function drawAssist(box) {
+  let st;
+  try { st = await api("/api/admin/nego/assist"); } catch (e) { put(clear(box), el("p", { class: "error", text: e.message })); return; }
+  if (!st.enabled) {
+    put(clear(box), el("p", { class: "small muted", text: !st.setting ? "Off. Turn on 'Draft messages with Claude' in Admin → Engine settings." : !st.api_key ? "Turned on, but the server has no ANTHROPIC_API_KEY." : "Turned on, but the anthropic package isn't installed on the server." }));
+    return;
+  }
+  const out = el("div", { "aria-live": "polite" });
+  const go = (kind, label) => act(label, async () => {
+    put(clear(out), el("p", { class: "muted small", text: "Drafting…" }));
+    try {
+      const r = await send(`/api/admin/nego/cycles/${ng.cid}/assist`, "POST", { kind });
+      const ta = el("textarea", { rows: 10, class: "draft" });
+      ta.value = r.text;
+      put(clear(out), ta, el("div", { class: "actions" },
+        act("Copy", async () => { ta.select(); try { await navigator.clipboard.writeText(ta.value); } catch (_) { document.execCommand("copy"); } toast("Copied"); }),
+        el("span", { class: "small muted", text: `Drafted by ${r.model} from: ${Object.keys(r.facts).join(", ")}. Check it before sending.` })));
+    } catch (e) { put(clear(out), el("p", { class: "error", text: e.message })); }
+  }, "secondary");
+  put(clear(box), el("div", { class: "actions" },
+    go("co_cover", "Counter-offer message (Bahasa)"), go("meeting_summary", "Meeting summary (Bahasa)"), go("escalation_note", "Escalation note")), out);
 }
 
 async function drawCO(box) {

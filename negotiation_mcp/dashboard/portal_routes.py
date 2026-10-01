@@ -24,6 +24,28 @@ from .admin import _form_file
 from .app import fail, ok
 
 STATIC = Path(__file__).resolve().parent / "static"
+# Bad links from one address: after this many in the window, that address waits.
+FAIL_LIMIT, FAIL_WINDOW = 20, 600
+_fails: dict[str, list[float]] = {}
+
+
+def _blocked(request: Request) -> bool:
+    import time
+
+    ip = request.client.host if request.client else "?"
+    now = time.monotonic()
+    recent = [t for t in _fails.get(ip, []) if now - t < FAIL_WINDOW]
+    _fails[ip] = recent
+    return len(recent) >= FAIL_LIMIT
+
+
+def _fail(request: Request) -> None:
+    import time
+
+    ip = request.client.host if request.client else "?"
+    _fails.setdefault(ip, []).append(time.monotonic())
+    if len(_fails) > 10_000:  # keep memory bounded
+        _fails.clear()
 COOKIE = "nego_principal"
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -39,8 +61,11 @@ def _who(acc: dict) -> str:
 
 def guarded(fn):
     async def run(request: Request) -> Response:
+        if _blocked(request):
+            return fail(EngineError("Terlalu banyak percobaan. Coba lagi nanti. / Too many attempts; try again later."), 429)
         acc = _access(request)
         if not acc:
+            _fail(request)
             return fail(EngineError("Tautan tidak berlaku lagi. Minta tautan baru ke Siloam. / "
                                     "This link is no longer valid. Ask Siloam for a new one."), 401)
         store.touch_link(acc["link"]["id"])
@@ -56,8 +81,11 @@ def guarded(fn):
 
 async def open_link(request: Request) -> Response:
     token = request.path_params["token"]
+    if _blocked(request):
+        return fail(EngineError("Too many attempts; try again later."), 429)
     acc = portal.resolve(token)
     if not acc:
+        _fail(request)
         return RedirectResponse("/p?invalid=1", status_code=303)
     store.log_event(acc["cycle"]["id"], f"principal:{acc['cycle']['principal']['name']}", "link.open",
                     {"link": acc["link"]["id"]})

@@ -252,6 +252,8 @@ def set_step(cid: int, step: str, by: str, note: str = "", send_link: bool = Fal
     link through the automation webhook (see notify.py)."""
     if due and step in M.PRINCIPAL_STEP_FIELDS and str(due)[:10] < date.today().isoformat():
         raise EngineError("The deadline can't be in the past")
+    if step == "feedback1" and not any(i.get("co_disc") is not None for i in store.items(cid)):
+        raise EngineError("Set the counter offer first (Negotiate tab): there's nothing for the principal to answer yet")
     c = store.set_step(cid, step, by, note, due if step in M.PRINCIPAL_STEP_FIELDS else None)
     scan(cid)  # some rules depend on the step (e.g. missing RFQ prices)
     if send_link and step in M.PRINCIPAL_STEP_FIELDS:

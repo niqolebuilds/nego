@@ -37,6 +37,8 @@ CSRF_HEADER = "x-requested-with"
 CSRF_VALUE = "nego"
 PUBLIC_API = {"/api/auth/signin", "/api/auth/me", "/api/auth/provider"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
 
 def _secret() -> bytes:
@@ -109,6 +111,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if path == "/" or path.endswith(".html") or path == "/analytics" or path == "/p" or path.startswith("/p/"):
             response.headers.setdefault("Cache-Control", "no-store")
+        if not path.startswith("/api/"):
+            # Pages load only their own scripts; inline style attributes are used by the charts.
+            response.headers.setdefault("Content-Security-Policy", CSP)
+        if request.url.scheme == "https":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")

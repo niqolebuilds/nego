@@ -12,9 +12,20 @@ x-app: &app
   build: ..
   environment:
     NEGOTIATION_DATA_DIR: /app/data/sample
+    NEGO_HOME: /workspace                     # app.db, nego.db, encrypted documents: back this up
+    # Set these in an .env file next to this compose file (never commit it). See GO_LIVE.md.
+    NEGO_SECRET: ${NEGO_SECRET:-}
+    NEGO_ADMIN_EMAIL: ${NEGO_ADMIN_EMAIL:-admin@example.com}
+    NEGO_DOC_KEY: ${NEGO_DOC_KEY:-}
+    NEGO_PUBLIC_URL: ${NEGO_PUBLIC_URL:-}
+    NEGO_NOTIFY_WEBHOOK_URL: ${NEGO_NOTIFY_WEBHOOK_URL:-}
+    NEGO_NOTIFY_SECRET: ${NEGO_NOTIFY_SECRET:-}
+    NEGO_NOTIFY_ADMINS: ${NEGO_NOTIFY_ADMINS:-}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   volumes:
     - ../data:/app/data
     - warehouse:/warehouse
+    - workspace:/workspace
 
 services:
   warehouse:
@@ -45,3 +56,5 @@ services:
 volumes:
   warehouse:
   metabase-data:
+  workspace:
+

@@ -417,6 +417,19 @@ Links can be revoked, and only their SHA-256 hash is stored.
     for pilots).
   - Only admins can download them, and every download is logged.
 
+**Claude drafting (optional, off by default).** In the Negotiate tab, admins can ask Claude to
+draft three things:
+- the counter-offer cover message to the principal (Bahasa);
+- a tidy meeting summary from their own notes (Bahasa);
+- the escalation note for the approver (English).
+
+The engine still computes every number. Only counts, the admin's notes and escalation totals are
+sent, never the item price list. Each draft is shown for review and logged. It needs
+`ANTHROPIC_API_KEY` and the setting turned on.
+
+**Going live:** see `deploy/GO_LIVE.md`. The development sign-in has to be replaced with SSO or
+passwords first.
+
 **Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
 open and prepare negotiations, edit items, decide findings, import, and move steps. **Sending the link automatically.** When an admin moves a negotiation to a principal step, the
 app can send the principal a fresh link by email and WhatsApp.
@@ -475,7 +488,8 @@ negotiation_mcp/
                     store (nego.db), prepare, template_io, anomalies, impact, service, demo,
                     checks (principal-side checks, ID/EN), portal (links, allowlists, send),
                     notify (outbox + webhook to Power Automate), negotiate (counter offer, Online Nego,
-                    escalation, BAK/Confirmation package), benchmark (import + matching), vault (encrypted documents)
+                    escalation, BAK/Confirmation package), benchmark (import + matching), vault (encrypted documents),
+                    assist (optional Claude drafting)
   templates/        Template_Nego.xlsx (the exact workbook used for export)
   dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, portal_routes.py, app.py;
                     static/ shell, chat, nego, renewals, admin, principal (the portal)
@@ -487,7 +501,7 @@ data/
   sample/           synthetic price book (marked SAMPLE_DATA)
   templates/        header-only CSVs describing the export
 deploy/
-  docker-compose.yml, SUPERSET.md, POWER_AUTOMATE.md
+  docker-compose.yml, SUPERSET.md, POWER_AUTOMATE.md, GO_LIVE.md
 tests/
   test_engine.py        33 tests including workbook parity
   test_pricebook.py     loading, validation, UoM, index
@@ -498,6 +512,7 @@ tests/
   test_portal.py        principal checks, field/response allowlists, links, sending, locked Excel
   test_notify.py        automatic link sending through a stub webhook: payload, signature, retry, redaction
   test_negotiate.py     counter-offer rules, benchmark matching, Online Nego, escalation, package, encrypted documents
+  test_assist.py        Claude drafting with a fake client: off by default, aggregates only, refusals; CSP; link limiter
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```

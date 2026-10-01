@@ -86,6 +86,9 @@ SETTINGS: tuple[Setting, ...] = (
             "After the deadline, a reminder goes out every day until the principal sends."),
     Setting("step_days", "Default days a principal gets to complete a step", "Principal negotiations", 7, "int", 1, 60),
     Setting("mou_alert_weekday", "Weekday for the MOU alert email (0 = Monday)", "Principal negotiations", 0, "int", 0, 6),
+    Setting("llm_assist", "Draft messages with Claude (counter-offer cover, meeting summary, escalation note)", "Assistant",
+            False, "bool", help="Needs ANTHROPIC_API_KEY on the server. Sends only counts, the admin's meeting notes and "
+            "escalation totals to Anthropic, never the item price list. Every draft is shown to a person before use."),
     Setting("llm_fallback", "Send questions the built-in parser can't understand to Claude", "Assistant", False, "bool",
             help="Needs ANTHROPIC_API_KEY on the server. Question text and engine results would be sent to Anthropic."),
 )

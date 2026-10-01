@@ -229,6 +229,11 @@ async function load(reset) {
   const qs = new URLSearchParams({ filter: P.filter, q: P.q, offset: P.items.length, limit: 50 });
   let d;
   try { d = await call(`/api/p/items?${qs}`); } catch (e) { toast(e.message); return; } finally { P.loading = false; }
+  if (reset && P.filter === "todo" && !d.total && d.counts.all && !load.switched) {
+    load.switched = true; // nothing left to fill: show everything instead of an empty list
+    P.filter = "all";
+    return load(true);
+  }
   P.items = P.items.concat(d.items);
   P.total = d.total;
   P.counts = d.counts;

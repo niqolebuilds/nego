@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from .. import appdb
 from ..engine import EngineError
-from ..nego import benchmark, demo, negotiate, notify, portal, service, store, vault
+from ..nego import assist, benchmark, demo, negotiate, notify, portal, service, store, vault
 from .admin import _form_file
 from .app import fail, ok
 
@@ -391,6 +391,20 @@ async def cycle_document_get(request: Request) -> Response:
                              "Cache-Control": "no-store"})
 
 
+@handler
+async def assist_status(_: Request) -> Response:
+    return ok(assist.status())
+
+
+@handler
+async def assist_draft(request: Request) -> Response:
+    body = await _json(request)
+    cid = _cid(request)
+    res = assist.draft(cid, str(body.get("kind", "")), _who(request))
+    appdb.audit(_who(request), "assist.draft", {"cycle": cid, "kind": res["kind"]})
+    return ok(res)
+
+
 def routes() -> list[Route]:
     return [
         Route("/api/nego/principals", principals),
@@ -417,6 +431,8 @@ def routes() -> list[Route]:
         Route("/api/admin/nego/cycles/{cid}/messages", message_list),
         Route("/api/admin/nego/cycles/{cid}/messages/{mid:int}/retry", message_retry, methods=["POST"]),
         Route("/api/admin/nego/notify", notify_status),
+        Route("/api/admin/nego/assist", assist_status),
+        Route("/api/admin/nego/cycles/{cid}/assist", assist_draft, methods=["POST"]),
         Route("/api/nego/benchmarks", benchmark_sources),
         Route("/api/admin/nego/benchmarks", benchmark_upload, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/benchmarks/match", benchmark_match, methods=["POST"]),
