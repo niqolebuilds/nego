@@ -44,8 +44,25 @@ def create_link(cid: int, by: str, days: int | None = None) -> dict:
         raise EngineError("A link can be valid for 1 to 90 days")
     token = secrets.token_urlsafe(24)
     expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat(timespec="seconds")
-    link = store.add_link(cid, _hash(token), expires, by)
+    # The token is also kept encrypted, so reminders can resend the same link.
+    from .vault import _fernet
+
+    link = store.add_link(cid, _hash(token), expires, by, _fernet().encrypt(token.encode()).decode())
     return {**link, "path": f"/p/{token}"}
+
+
+def current_link_path(cid: int) -> dict | None:
+    """The live link for reminders: same token as sent before, or None if there isn't one."""
+    from .vault import _fernet
+
+    link = store.latest_active_link(cid)
+    if not link:
+        return None
+    try:
+        token = _fernet().decrypt(link["token_enc"].encode()).decode()
+    except Exception:  # noqa: BLE001 - key rotated; a fresh link will be made
+        return None
+    return {**{k: v for k, v in link.items() if k not in ("token_enc", "token_hash")}, "path": f"/p/{token}"}
 
 
 def resolve(token: str | None) -> dict | None:
@@ -266,9 +283,13 @@ def submit(cycle: dict, by: str) -> dict:
                           f"{s['outstanding_count']} things still need attention.")
     store.mark_submitted(cycle["id"], step, by, {"items": s["items"], "increases": s["increase_count"],
                                                  "discontinued": s["discontinued"]})
-    from . import service
+    from . import notify, service
 
     service.scan(cycle["id"])  # Siloam's own checks run straight away on what was sent
+    try:
+        notify.step_submitted(cycle["id"], step, s, by)
+    except Exception:  # noqa: BLE001 - a failed notice must never undo the principal's submission
+        pass
     return s
 
 

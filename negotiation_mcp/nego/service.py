@@ -42,6 +42,10 @@ def principals(today: date | None = None) -> dict:
         p["mou_days_left"] = (end - today).days if end else None
         open_cycle = p["cycle"] and p["cycle"]["status"] == "open"
         p["mou_alert"] = bool(end and months_between(today, end) <= alert_months and not open_cycle)
+        c = p["cycle"]
+        p["overdue_days"] = ((today - date.fromisoformat(c["step_due"])).days if open_cycle and c.get("step_due")
+                             and c["current_step"] in M.PRINCIPAL_STEP_FIELDS and c["current_step"] not in c["submitted_steps"]
+                             and date.fromisoformat(c["step_due"]) < today else None)
     return {"principals": rows, "alert_months": alert_months, "steps": steps()}
 
 
@@ -243,10 +247,12 @@ def import_template(cid: int, content: bytes, by: str, apply: bool, fields: tupl
     return plan
 
 
-def set_step(cid: int, step: str, by: str, note: str = "", send_link: bool = False) -> dict:
+def set_step(cid: int, step: str, by: str, note: str = "", send_link: bool = False, due: str | None = None) -> dict:
     """Move to a step. With ``send_link``, a principal step also sends the principal their
     link through the automation webhook (see notify.py)."""
-    c = store.set_step(cid, step, by, note)
+    if due and step in M.PRINCIPAL_STEP_FIELDS and str(due)[:10] < date.today().isoformat():
+        raise EngineError("The deadline can't be in the past")
+    c = store.set_step(cid, step, by, note, due if step in M.PRINCIPAL_STEP_FIELDS else None)
     scan(cid)  # some rules depend on the step (e.g. missing RFQ prices)
     if send_link and step in M.PRINCIPAL_STEP_FIELDS:
         from . import notify

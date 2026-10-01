@@ -79,6 +79,13 @@ SETTINGS: tuple[Setting, ...] = (
             "fraction", 0, 1),
     Setting("escalation_impact", "Escalate when agreed prices cost more than the MOU by (Rp a year)", "Principal negotiations", 0,
             "number", 0, 1e13, "0 = any net increase needs sign-off."),
+    Setting("reminders_on", "Send deadline reminders to principals", "Principal negotiations", True, "bool",
+            help="Through Power Automate, when automatic sending is set up."),
+    Setting("reminder_first_days", "First reminder, days before the deadline", "Principal negotiations", 3, "int", 0, 30),
+    Setting("reminder_second_days", "Second reminder, days before the deadline", "Principal negotiations", 1, "int", 0, 30,
+            "After the deadline, a reminder goes out every day until the principal sends."),
+    Setting("step_days", "Default days a principal gets to complete a step", "Principal negotiations", 7, "int", 1, 60),
+    Setting("mou_alert_weekday", "Weekday for the MOU alert email (0 = Monday)", "Principal negotiations", 0, "int", 0, 6),
     Setting("llm_fallback", "Send questions the built-in parser can't understand to Claude", "Assistant", False, "bool",
             help="Needs ANTHROPIC_API_KEY on the server. Question text and engine results would be sent to Anthropic."),
 )

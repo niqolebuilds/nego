@@ -36,8 +36,12 @@ from . import model as M
 from . import portal, store
 
 EVENT_STEP_OPENED = "principal.step_opened"
+EVENT_REMINDER = "principal.reminder"
+EVENT_SUBMITTED = "siloam.step_submitted"
+EVENT_MOU_ALERT = "siloam.mou_alert"
 EVENT_TEST = "test"
 TEMPLATE = "siloam_nego_step_open"
+TEMPLATE_REMINDER = "siloam_nego_reminder"
 BACKOFF_MIN = (1, 5, 15, 60, 240)
 STEP_TEXT = {
     "identification": ("Konfirmasi data item", "Confirm item details"),
@@ -103,35 +107,23 @@ def _wait_seconds(attempt: int) -> int:
     return 60 * BACKOFF_MIN[min(attempt, len(BACKOFF_MIN) - 1)]
 
 
-def step_opened(cid: int, by: str) -> dict:
-    """Create a fresh link for the principal's open step and queue it for email + WhatsApp."""
-    c = store.require_cycle(cid)
-    step = c["current_step"]
-    if step not in M.PRINCIPAL_STEP_FIELDS:
-        raise EngineError("It's Siloam's turn at this step; there's nothing to send the principal")
-    p = c["principal"]
-    cfg = config()
+def _contacts(p: dict) -> tuple[str | None, str | None, str]:
     email = (p.get("contact_email") or "").strip() or None
     wa = whatsapp_number(p.get("contact_phone"))
-    recipient = ", ".join(x for x in (email, f"+{wa}" if wa else None) if x) or "—"
-    if not cfg["enabled"]:
-        store.queue_message(cid, EVENT_STEP_OPENED, recipient, {}, by, "skipped",
-                            f"Automatic sending isn't set up ({', '.join(status()['missing'])})")
-        return {"status": "skipped", "reason": "not_configured", "recipient": recipient}
-    if not email and not wa:
-        store.queue_message(cid, EVENT_STEP_OPENED, recipient, {}, by, "skipped",
-                            "The principal has no contact email or WhatsApp number")
-        return {"status": "skipped", "reason": "no_contact", "recipient": recipient}
-    store.revoke_active_links(cid, by)  # one live link per principal: the one just sent
-    link = portal.create_link(cid, by)
+    return email, wa, ", ".join(x for x in (email, f"+{wa}" if wa else None) if x) or "—"
+
+
+def _principal_payload(c: dict, event: str, link: dict, url: str, extra: dict | None = None) -> dict:
+    p = c["principal"]
+    step = c["current_step"]
+    email, wa, _ = _contacts(p)
     token = link["path"].rsplit("/", 1)[1]
-    url = cfg["public_url"] + link["path"]
     step_id, step_en = STEP_TEXT[step]
     due = tanggal(c.get("step_due"))
     contract = f"{tanggal(c['contract_start'])} – {tanggal(c['contract_end'])}"
     subject, body = _email(p["name"], step_id, step_en, due, url, contract)
     payload = {
-        "event": EVENT_STEP_OPENED,
+        "event": event,
         "sent_at": store.now(),
         "principal": {"name": p["name"], "distributor": p.get("distributor")},
         "recipient": {"name": p.get("contact_name"), "email": email, "whatsapp": wa},
@@ -143,9 +135,148 @@ def step_opened(cid: int, by: str) -> dict:
                      "body_params": [p.get("contact_name") or p["name"], step_id, due or "-"],
                      "button_param": token},
     }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _can_send(cid: int, event: str, recipient: str, by: str, has_contact: bool, dedupe: str | None = None) -> dict | None:
+    """None if sending can go ahead; otherwise records why not and returns that."""
+    if not config()["enabled"]:
+        store.queue_message(cid, event, recipient, {}, by, "skipped",
+                            f"Automatic sending isn't set up ({', '.join(status()['missing'])})", dedupe=dedupe)
+        return {"status": "skipped", "reason": "not_configured", "recipient": recipient}
+    if not has_contact:
+        store.queue_message(cid, event, recipient, {}, by, "skipped", "No contact email or WhatsApp number", dedupe=dedupe)
+        return {"status": "skipped", "reason": "no_contact", "recipient": recipient}
+    return None
+
+
+def step_opened(cid: int, by: str) -> dict:
+    """Create a fresh link for the principal's open step and queue it for email + WhatsApp."""
+    c = store.require_cycle(cid)
+    if c["current_step"] not in M.PRINCIPAL_STEP_FIELDS:
+        raise EngineError("It's Siloam's turn at this step; there's nothing to send the principal")
+    email, wa, recipient = _contacts(c["principal"])
+    stop = _can_send(cid, EVENT_STEP_OPENED, recipient, by, bool(email or wa))
+    if stop:
+        return stop
+    store.revoke_active_links(cid, by)  # one live link per principal: the one just sent
+    link = portal.create_link(cid, by)
+    payload = _principal_payload(c, EVENT_STEP_OPENED, link, config()["public_url"] + link["path"])
     mid = store.queue_message(cid, EVENT_STEP_OPENED, recipient, payload, by)
     wake()
     return {"status": "queued", "id": mid, "recipient": recipient}
+
+
+def reminder(cid: int, kind: str, days_left: int, today: date, by: str = "system") -> dict:
+    """A reminder for the open step, with the same link as before (a new one only if it expired)."""
+    c = store.require_cycle(cid)
+    email, wa, recipient = _contacts(c["principal"])
+    key = f"reminder:{cid}:{c['current_step']}:{today.isoformat()}"
+    if store.has_message(key):
+        return {"status": "duplicate"}
+    stop = _can_send(cid, EVENT_REMINDER, recipient, by, bool(email or wa), dedupe=key)
+    if stop:
+        return stop
+    link = portal.current_link_path(cid)
+    if link is None:
+        store.revoke_active_links(cid, by)
+        link = portal.create_link(cid, by)
+    payload = _principal_payload(c, EVENT_REMINDER, link, config()["public_url"] + link["path"],
+                                 {"reminder": {"kind": kind, "days_left": days_left}})
+    step_id = payload["step"]["label_id"]
+    due = payload["step"]["due"] or "-"
+    when = (f"{days_left} hari lagi" if days_left > 0 else "hari ini") if kind != "overdue" else f"terlambat {-days_left} hari"
+    payload["email"]["subject"] = f"Pengingat: {step_id} – batas waktu {due} ({when})"
+    payload["whatsapp"].update(template=TEMPLATE_REMINDER,
+                               body_params=[c["principal"].get("contact_name") or c["principal"]["name"], step_id, due, when])
+    mid = store.queue_message(cid, EVENT_REMINDER, recipient, payload, by, dedupe=key)
+    if mid:
+        wake()
+    return {"status": "queued" if mid else "duplicate", "id": mid, "recipient": recipient}
+
+
+def admins() -> list[str]:
+    return [a.strip() for a in (os.environ.get("NEGO_NOTIFY_ADMINS") or "").split(",") if "@" in a]
+
+
+def step_submitted(cid: int, step: str, summary: dict, by: str) -> dict:
+    """Tell Siloam's team that a principal sent a step."""
+    c = store.require_cycle(cid)
+    to = admins()
+    recipient = ", ".join(to) or "—"
+    key = f"submitted:{cid}:{step}:{store.now()[:16]}"
+    stop = _can_send(cid, EVENT_SUBMITTED, recipient, by, bool(to), dedupe=key)
+    if stop:
+        return stop
+    p = c["principal"]
+    url = f"{config()['public_url']}/#nego/{cid}"
+    label = STEP_TEXT.get(step, (step, step))[1]
+    facts = [f"Items: {summary.get('items', 0)}", f"Price increases (with reasons): {summary.get('increase_count', 0)}",
+             f"Discontinued: {summary.get('discontinued', 0)}"]
+    if step == "submission":
+        facts = [f"Documents: {summary.get('documents', 0)}"]
+    e = html.escape
+    body = (f"<p><b>{e(p['name'])}</b> sent <b>{e(label)}</b>.</p><ul>" + "".join(f"<li>{e(f)}</li>" for f in facts) +
+            f"</ul><p><a href=\"{e(url)}\">Open the negotiation</a> to review the findings and move to the next step.</p>")
+    payload = {"event": EVENT_SUBMITTED, "sent_at": store.now(), "principal": {"name": p["name"]},
+               "step": {"key": step, "label_en": label}, "recipients": to, "link": url, "summary": summary,
+               "email": {"to": to, "subject": f"{p['name']} sent {label}", "html": body}}
+    mid = store.queue_message(cid, EVENT_SUBMITTED, recipient, payload, by, dedupe=key)
+    wake()
+    return {"status": "queued", "id": mid, "recipient": recipient}
+
+
+def mou_alert(today: date) -> dict:
+    """Weekly list for Siloam: MOUs ending within the alert window with no negotiation open."""
+    from . import service
+
+    d = service.principals(today)
+    due = [p for p in d["principals"] if p["mou_alert"]]
+    key = f"mou_alert:{today.isoformat()}"
+    to = admins()
+    if not due or store.has_message(key):
+        return {"status": "nothing" if not due else "duplicate"}
+    stop = _can_send(None, EVENT_MOU_ALERT, ", ".join(to) or "—", "system", bool(to), dedupe=key)
+    if stop:
+        return stop
+    e = html.escape
+    rows = "".join(f"<li><b>{e(p['name'])}</b> – MOU ends {e(tanggal(p['mou_end']) or '')} ({p['mou_days_left']} days)</li>" for p in due)
+    url = f"{config()['public_url']}/#nego"
+    payload = {"event": EVENT_MOU_ALERT, "sent_at": store.now(), "recipients": to, "link": url,
+               "principals": [{"name": p["name"], "mou_end": p["mou_end"], "days_left": p["mou_days_left"]} for p in due],
+               "email": {"to": to, "subject": f"{len(due)} MOUs end within {d['alert_months']} months with no negotiation open",
+                         "html": f"<p>Start these negotiations:</p><ul>{rows}</ul><p><a href=\"{e(url)}\">Open Negotiations</a></p>"}}
+    mid = store.queue_message(None, EVENT_MOU_ALERT, ", ".join(to), payload, "system", dedupe=key)
+    wake()
+    return {"status": "queued", "id": mid, "count": len(due)}
+
+
+def daily(today: date | None = None) -> dict:
+    """Reminders before and after step deadlines, and the weekly MOU alert. Safe to run often:
+    each message has a de-duplication key, so nothing goes out twice on the same day."""
+    from .. import settings as S
+
+    today = today or date.today()
+    v = S.load()
+    out = {"reminders": 0, "mou_alert": None}
+    if not config()["enabled"]:
+        return out
+    if v["reminders_on"]:
+        marks = {int(v["reminder_first_days"]), int(v["reminder_second_days"])}
+        for cid in store.open_cycles():
+            c = store.get_cycle(cid)
+            step = c["current_step"]
+            if step not in M.PRINCIPAL_STEP_FIELDS or step in c["submitted_steps"] or not c.get("step_due"):
+                continue
+            left = (date.fromisoformat(c["step_due"]) - today).days
+            kind = f"h-{left}" if left in marks else "overdue" if left < 0 else None
+            if kind and reminder(cid, kind, left, today).get("status") == "queued":
+                out["reminders"] += 1
+    if today.weekday() == int(v["mou_alert_weekday"]):
+        out["mou_alert"] = mou_alert(today).get("status")
+    return out
 
 
 def send_test(by: str) -> dict:
@@ -240,6 +371,8 @@ def start_sender(interval: int = 60) -> None:
             _wake.wait(interval)
             _wake.clear()
             try:
+                if os.environ.get("NEGO_SCHEDULER", "1") != "0":
+                    daily()
                 deliver_due()
             except Exception:  # noqa: BLE001 - keep the sender alive; errors are on each message
                 pass

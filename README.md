@@ -427,6 +427,15 @@ app can send the principal a fresh link by email and WhatsApp.
 - **Setup:** set `NEGO_PUBLIC_URL` and `NEGO_NOTIFY_WEBHOOK_URL` on the server. The step-by-step
   guide, the JSON schema and the template text are in `deploy/POWER_AUTOMATE.md`.
 - **Without it:** an admin copies the link from **Principal link**.
+- **Deadline:** moving to a principal step sets a deadline (7 days by default).
+- **Reminders:** they go out 3 days and 1 day before, then daily while late, until the principal
+  sends. Each carries the same link.
+- **Notices to Siloam:** when a principal sends a step, Siloam's team gets an email
+  (`NEGO_NOTIFY_ADMINS`). Admins also get a weekly email listing MOUs that end within 6 months
+  with no negotiation open.
+- **Other WhatsApp providers:** an official partner of Meta (BSP) can replace Meta's API inside
+  the flow. Unofficial WhatsApp gateways (QR-linked numbers) aren't suitable: numbers get banned
+  and the links are confidential.
 
 **Try it.** As an admin, open **Negotiations** and choose **Load sample principals**. That loads
 6 fictional principals and opens 3 negotiations. One of them already has an RFQ filled the way

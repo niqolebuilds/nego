@@ -144,3 +144,69 @@ def test_routes_admin_only(env):
     v.post("/api/auth/signin", json={"email": "v@example.com"}, headers=H)
     assert v.post(f"/api/admin/nego/cycles/{c['id']}/links/send", headers=H).status_code == 403
     assert v.get("/api/admin/nego/notify").status_code == 403
+
+
+# ---------------------------------------------------------------- reminders, submit notice, MOU alert
+
+from datetime import date, timedelta  # noqa: E402
+
+
+def test_reminders_before_and_after_the_deadline(env):
+    c = cycle()
+    today = date.today()
+    due = today + timedelta(days=3)
+    service.set_step(c["id"], "rfq", "a@x", send_link=True, due=due.isoformat())
+    notify.deliver_due()
+    opened = env.received[-1][0]
+    assert opened["step"]["due"] == notify.tanggal(due.isoformat())
+    # H-3 today, nothing tomorrow (H-2), H-1, nothing on the day, then daily when overdue
+    assert notify.daily(today)["reminders"] == 1
+    assert notify.daily(today)["reminders"] == 0  # same day again: no duplicate
+    assert notify.daily(today + timedelta(days=1))["reminders"] == 0
+    assert notify.daily(today + timedelta(days=2))["reminders"] == 1
+    assert notify.daily(today + timedelta(days=3))["reminders"] == 0
+    assert notify.daily(today + timedelta(days=4))["reminders"] == 1
+    assert notify.daily(today + timedelta(days=5))["reminders"] == 1
+    notify.deliver_due()
+    rem = [p for p, _, _ in env.received if p["event"] == "principal.reminder"]
+    assert [r["reminder"]["kind"] for r in rem] == ["h-3", "h-1", "overdue", "overdue"]
+    # reminders carry the same link that opened the step, and it still works
+    assert {r["link_token"] for r in rem} == {opened["link_token"]}
+    assert portal.resolve(opened["link_token"]) is not None
+    assert rem[0]["whatsapp"]["template"] == "siloam_nego_reminder"
+
+
+def test_no_reminder_after_sending_and_notice_to_siloam(env, monkeypatch):
+    monkeypatch.setenv("NEGO_NOTIFY_ADMINS", "buyer@siloamhospitals.example, head@siloamhospitals.example")
+    c = cycle()
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", due=(today + timedelta(days=1)).isoformat())
+    cyc = store.get_cycle(c["id"])
+    portal.fill_from_reference(cyc, "p")
+    portal.submit(store.get_cycle(c["id"]), "principal:x")
+    assert notify.daily(today)["reminders"] == 0
+    notify.deliver_due()
+    sub = [p for p, _, _ in env.received if p["event"] == "siloam.step_submitted"]
+    assert len(sub) == 1 and sub[0]["recipients"] == ["buyer@siloamhospitals.example", "head@siloamhospitals.example"]
+    assert sub[0]["link"].endswith(f"/#nego/{c['id']}") and "PT Alfa Notif" in sub[0]["email"]["subject"]
+
+
+def test_deadline_cannot_be_in_the_past(env):
+    c = cycle()
+    with pytest.raises(Exception, match="past"):
+        service.set_step(c["id"], "rfq", "a@x", due="2000-01-01")
+
+
+def test_weekly_mou_alert(env, monkeypatch):
+    monkeypatch.setenv("NEGO_NOTIFY_ADMINS", "buyer@siloamhospitals.example")
+    today = date.today()
+    store.create_principal({"name": "PT Hampir Habis", "mou_end": (today + timedelta(days=60)).isoformat()}, "a@x")
+    store.create_principal({"name": "PT Masih Lama", "mou_end": (today + timedelta(days=400)).isoformat()}, "a@x")
+    monday = today + timedelta(days=(0 - today.weekday()) % 7)
+    res = notify.mou_alert(today)
+    assert res["status"] == "queued" and res["count"] == 1
+    assert notify.mou_alert(today)["status"] == "duplicate"
+    notify.deliver_due()
+    alert = [p for p, _, _ in env.received if p["event"] == "siloam.mou_alert"][0]
+    assert [p["name"] for p in alert["principals"]] == ["PT Hampir Habis"]
+    assert notify.daily(monday + timedelta(days=1))["mou_alert"] is None  # only on the set weekday

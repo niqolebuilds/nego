@@ -198,7 +198,7 @@ async def cycle_scan(request: Request) -> Response:
 async def cycle_step(request: Request) -> Response:
     body = await _json(request)
     c = service.set_step(_cid(request), str(body.get("step", "")), _who(request), str(body.get("note", "")),
-                         send_link=bool(body.get("send_link", False)))
+                         send_link=bool(body.get("send_link", False)), due=body.get("due") or None)
     return ok(c)
 
 

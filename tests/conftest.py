@@ -13,6 +13,7 @@ import pytest
 # never read or write a real one. Set before any app module computes a path.
 os.environ["NEGO_HOME"] = tempfile.mkdtemp(prefix="nego-test-")
 os.environ.pop("NEGOTIATION_DATA_DIR", None)
+os.environ["NEGO_SCHEDULER"] = "0"  # tests call notify.daily() themselves
 
 from negotiation_mcp.pricebook import PRICE_HISTORY_COLUMNS, PriceBook
 

@@ -109,6 +109,8 @@ function cycleCell(p) {
   return el("div", { class: "cyc" },
     el("span", { class: `stage ${c.status === "closed" ? "s-agreed" : "s-negotiating"}`, text: c.step_label }),
     c.submitted_steps && c.submitted_steps[c.current_step] ? el("span", { class: "sent-pill", text: "Principal sent ✓" }) : null,
+    p.overdue_days ? el("span", { class: "late-pill", text: `Overdue ${p.overdue_days} day${p.overdue_days === 1 ? "" : "s"}` }) :
+      c.step_due && !(c.submitted_steps || {})[c.current_step] ? el("span", { class: "small muted", text: `Due ${fmtDate(c.step_due)}` }) : null,
     el("div", { class: "mini-steps", "aria-label": `Step ${at + 1} of ${keys.length}` },
       keys.slice(0, -1).map((k, i) => el("i", { class: i < at ? "done" : i === at ? "now" : "" }))),
     el("div", { class: "small muted", text: `${fmtDate(c.contract_start)} – ${fmtDate(c.contract_end)}` }));
@@ -284,7 +286,7 @@ function renderHeaderParts() {
   const sent = (c.submitted_steps || {})[c.current_step];
   const turn = steps[at] && steps[at].who === "principal";
   const banner = sent ? el("p", { class: "sent-banner", text: `The principal sent ${steps[at].label} on ${new Date(sent.at).toLocaleString("en-GB")}. Review the findings, then move to the next step.` })
-    : turn ? el("p", { class: "turn-banner", text: "It's the principal's turn. Their link goes out automatically when the step opens (see Activity → Messages); Principal link shares it by hand." }) : null;
+    : turn ? el("p", { class: "turn-banner", text: `It's the principal's turn${c.step_due ? `, due ${fmtDate(c.step_due)}` : ""}. Their link and reminders go out automatically (see Activity → Messages); Principal link shares it by hand.` }) : null;
   stepsBox.append(el("div", { class: "card stepcard" }, ol, banner, move));
 
   const latest = k.latest_impact;
@@ -327,17 +329,22 @@ async function moveStep(step) {
   if (!auto.enabled || !to) sendBox.disabled = true;
   const why = !auto.enabled ? `Automatic sending is off: set ${auto.missing.join(" and ")} on the server (see deploy/POWER_AUTOMATE.md). You can still share the link by hand.`
     : !to ? "The principal has no email or WhatsApp number. Add one with Edit principal, or share the link by hand." : `To: ${to}`;
+  const days = (await api("/api/settings").catch(() => ({ settings: [] }))).settings.find((x) => x.key === "step_days");
+  const d0 = new Date(); d0.setDate(d0.getDate() + (days ? days.value : 7));
+  const dueInput = el("input", { type: "date", id: "step-due", value: d0.toISOString().slice(0, 10), min: new Date().toISOString().slice(0, 10) });
   const body = openPanel(el("p", { class: "eyebrow", text: "Move step" }), el("h2", { id: "drawer-title", text: `Move to ${label}` }),
     el("p", { class: "muted", text: "It's the principal's turn at this step. They fill it online or in Excel from their link." }),
+    el("form", { class: "progress-form", onsubmit: (e) => e.preventDefault() }, field("Deadline for the principal", dueInput,
+      "Reminders go out 3 days and 1 day before, then daily if late (Engine settings).")),
     el("label", { class: "check big-check" }, sendBox, el("span", {}, el("b", { text: "Send the link to the principal automatically" }), el("span", { class: "small muted block", text: "Email and WhatsApp, through Power Automate. A new link replaces any older one." }))),
     el("p", { class: `small ${auto.enabled && to ? "" : "warn-text"}`, text: why }),
-    el("div", { class: "actions" }, act(`Move to ${label}`, async () => { closeDrawer(); await doMove(step, label, sendBox.checked); }), act("Cancel", closeDrawer, "ghost")));
+    el("div", { class: "actions" }, act(`Move to ${label}`, async () => { closeDrawer(); await doMove(step, label, sendBox.checked, dueInput.value); }), act("Cancel", closeDrawer, "ghost")));
   return body;
 }
 
-async function doMove(step, label, sendLink) {
+async function doMove(step, label, sendLink, due) {
   try {
-    const r = await send(`/api/admin/nego/cycles/${ng.cid}/step`, "POST", { step, send_link: sendLink });
+    const r = await send(`/api/admin/nego/cycles/${ng.cid}/step`, "POST", { step, send_link: sendLink, due: due || null });
     const m = r.message;
     toast(m ? (m.status === "queued" ? `Now at ${label}. Link sent to ${m.recipient}` : `Now at ${label}. Link not sent: ${m.reason === "no_contact" ? "no contact details" : "automatic sending is off"}`) : `Now at ${label}`);
     await refreshOverview();
@@ -721,9 +728,10 @@ async function renderMessages(box) {
       isAdmin() && ng.ov.cycle.status === "open" && PRINCIPAL_STEPS.has(ng.ov.cycle.current_step) ? act("Send link now", async () => {
         try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/links/send`, "POST", {}); toast(r.status === "queued" ? `Link sent to ${r.recipient}` : "Not sent: see the message list"); await refreshOverview(); renderActivity($("ng-body")); } catch (e) { toast(e.message); }
       }, "secondary") : null),
-    d.messages.length ? el("table", { class: "msg-table" }, el("thead", {}, el("tr", {}, ["When", "To", "Status", ""].map((h) => el("th", { text: h })))),
+    d.messages.length ? el("table", { class: "msg-table" }, el("thead", {}, el("tr", {}, ["When", "Message", "To", "Status", ""].map((h) => el("th", { text: h })))),
       el("tbody", {}, d.messages.map((m) => el("tr", {},
         el("td", { text: new Date(m.created_at).toLocaleString("en-GB") }),
+        el("td", { text: { "principal.step_opened": "Link for the step", "principal.reminder": "Deadline reminder", "siloam.step_submitted": "Notice to Siloam: principal sent", "siloam.mou_alert": "MOU alert" }[m.event] || m.event }),
         el("td", { text: m.recipient || "—" }),
         el("td", {}, el("span", { class: `mstat s-${m.status}`, text: { queued: "Queued", sending: "Sending", sent: "Sent", failed: `Failed (${m.attempts} tries)`, skipped: "Not sent" }[m.status] || m.status }),
           m.last_error ? el("div", { class: "small muted", text: m.last_error }) : null),

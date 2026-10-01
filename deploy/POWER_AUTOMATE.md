@@ -19,6 +19,7 @@ button.
 | `NEGO_PUBLIC_URL` | `https://nego.siloamhospitals.com` | The address principals open. It must be reachable from outside. |
 | `NEGO_NOTIFY_WEBHOOK_URL` | the flow's HTTP POST URL | It contains a signature, so treat it like a password. |
 | `NEGO_NOTIFY_SECRET` | any long random string | Optional. Adds `X-Nego-Signature: sha256=<HMAC of the body>` for tools that check it, such as n8n. |
+| `NEGO_NOTIFY_ADMINS` | `buyer@siloamhospitals.com, head.procurement@siloamhospitals.com` | Who gets "principal sent a step" notices and the weekly MOU alert. |
 
 Restart the app after setting them. The server must be allowed to make outbound HTTPS calls to
 `*.logic.azure.com` / `*.environment.api.powerplatform.com`.
@@ -26,7 +27,24 @@ Restart the app after setting them. The server must be allowed to make outbound 
 To check: as an admin, call `POST /api/admin/nego/notify/test` (or use the **Send link now**
 button on a negotiation at a principal step). The flow should answer 200.
 
-## 2. WhatsApp template (submit to Meta once)
+## Events the app sends
+
+| `event` | When | To | WhatsApp template |
+|---|---|---|---|
+| `principal.step_opened` | An admin moves the negotiation to a principal step | Principal: email and WhatsApp | `siloam_nego_step_open` |
+| `principal.reminder` | 3 and 1 days before the step deadline, then daily while late, until the principal sends | Principal: email and WhatsApp | `siloam_nego_reminder` |
+| `siloam.step_submitted` | A principal sends a step | `NEGO_NOTIFY_ADMINS`: email only | none |
+| `siloam.mou_alert` | Weekly (Monday by default), when some MOUs end within 6 months with no negotiation open | `NEGO_NOTIFY_ADMINS`: email only | none |
+| `test` | The admin's test call | none; just answer 200 | none |
+
+- **Reminder timing:** reminder days, the default step deadline and the alert weekday are set in
+  **Admin → Engine settings**.
+- **Same link:** a reminder carries the same link the principal already got.
+- **Never twice:** the app never sends the same reminder twice on one day, even after a restart.
+- **Recipients for Siloam's emails:** `siloam.*` events list them in `email.to`, an array; send
+  one email per address or join them with `;`.
+
+## 2. WhatsApp templates (submit to Meta once)
 
 In **WhatsApp Manager → Message templates → Create**:
 
@@ -45,6 +63,22 @@ In **WhatsApp Manager → Message templates → Create**:
 
 The app sends these values as `whatsapp.body_params` (three items, in order) and
 `whatsapp.button_param`.
+
+**Second template**, for reminders:
+
+- **Name:** `siloam_nego_reminder`
+- **Category:** Utility
+- **Language:** `id`
+- **Body:**
+  ```
+  Halo {{1}}, pengingat dari Siloam Hospitals: {{2}} belum dikirim. Batas waktu {{3}} ({{4}}).
+  Silakan klik tombol di bawah untuk melanjutkan. Data yang sudah diisi tersimpan.
+  ```
+- **Button:** the same dynamic URL as the first template.
+- **Samples:** `{{1}}` = `Ibu Sari`, `{{2}}` = `Isi harga penawaran (RFQ)`,
+  `{{3}}` = `15 Oktober 2026`, `{{4}}` = `1 hari lagi`
+
+For reminders, `whatsapp.body_params` has **four** items.
 
 You also need, from the Meta Business app: the **Phone number ID** and a **permanent access token**
 (System User token with `whatsapp_business_messaging`). Keep the token in an Azure Key Vault secret
@@ -76,8 +110,12 @@ Create an **Automated cloud flow → When an HTTP request is received**.
      }
    }
    ```
-2. **Condition:** `event` is equal to `principal.step_opened`. If not (for example the app's test
-   event), go straight to step 5 and answer 200.
+2. **Switch** on `event`:
+   - **`principal.step_opened` and `principal.reminder`:** steps 3 and 4 below. The reminder
+     uses the second template and four body parameters.
+   - **`siloam.step_submitted` and `siloam.mou_alert`:** only *Send an email (V2)*, with To set
+     to `join(triggerBody()?['email']?['to'], ';')`, plus Subject and Body from `email`.
+   - **Default (for example `test`):** go straight to step 5 and answer 200.
 3. **If `recipient.email` is not empty:** *Office 365 Outlook → Send an email from a shared mailbox
    (V2)*.
    - Mailbox: the procurement mailbox

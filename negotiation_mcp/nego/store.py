@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS cycle_items (
 CREATE TABLE IF NOT EXISTS principal_links (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
   token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL,
-  expires_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT, last_used_at TEXT);
+  expires_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT, last_used_at TEXT, token_enc TEXT);
 CREATE TABLE IF NOT EXISTS benchmarks (
   id INTEGER PRIMARY KEY, source TEXT NOT NULL, name TEXT NOT NULL, brand TEXT, catalog_no TEXT, unit_text TEXT,
   pack_qty REAL, price REAL NOT NULL, incl_ppn INTEGER NOT NULL DEFAULT 1, price_pp REAL, price_date TEXT,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY, cycle_id INTEGER REFERENCES cycles(id) ON DELETE CASCADE, event TEXT NOT NULL,
   channel TEXT NOT NULL DEFAULT 'webhook', recipient TEXT, payload TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
-  created_at TEXT NOT NULL, created_by TEXT, next_try_at TEXT, sent_at TEXT);
+  created_at TEXT NOT NULL, created_by TEXT, next_try_at TEXT, sent_at TEXT, dedupe TEXT);
 CREATE TABLE IF NOT EXISTS item_changes (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL, item_id INTEGER NOT NULL, at TEXT NOT NULL,
   user_email TEXT NOT NULL, field TEXT NOT NULL, old TEXT, new TEXT, via TEXT);
@@ -116,6 +116,7 @@ def connect() -> Iterator[sqlite3.Connection]:
     try:
         if fresh:
             con.executescript(SCHEMA)
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_outbox_dedupe ON outbox(dedupe)")
         yield con
         con.commit()
     finally:
@@ -130,6 +131,8 @@ MIGRATIONS = (
     ("cycle_items", "co_note", "TEXT"),
     ("cycles", "meeting_at", "TEXT"),
     ("cycles", "meeting_notes", "TEXT"),
+    ("principal_links", "token_enc", "TEXT"),
+    ("outbox", "dedupe", "TEXT"),
 )
 
 
@@ -140,6 +143,8 @@ def init() -> None:
             have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
             if col not in have:
                 con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {kind}")
+        # one message per de-duplication key (daily reminders survive restarts without repeating)
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_outbox_dedupe ON outbox(dedupe)")
 
 
 def _d(r: sqlite3.Row | None) -> dict | None:
@@ -386,7 +391,7 @@ def update_cycle(cid: int, data: dict, by: str) -> dict:
         return get_cycle(cid, con)
 
 
-def set_step(cid: int, step: str, by: str, note: str = "") -> dict:
+def set_step(cid: int, step: str, by: str, note: str = "", due: str | None = None) -> dict:
     if step not in M.STEP_KEYS:
         raise EngineError("Unknown step")
     with connect() as con:
@@ -396,9 +401,10 @@ def set_step(cid: int, step: str, by: str, note: str = "") -> dict:
         status = "closed" if step == "closed" else "open"
         submitted = dict(c["submitted_steps"])
         submitted.pop(step, None)  # moving (back) to a step opens it again for the principal
-        con.execute("UPDATE cycles SET current_step = ?, status = ?, step_due = NULL, submitted_steps = ?, updated_at = ?, "
-                    "updated_by = ? WHERE id = ?", (step, status, json.dumps(submitted), now(), by, cid))
-        _event(con, cid, by, "step.set", {"from": c["current_step"], "to": step, "note": note[:300] or None})
+        due = _date(due, "Deadline")
+        con.execute("UPDATE cycles SET current_step = ?, status = ?, step_due = ?, submitted_steps = ?, updated_at = ?, "
+                    "updated_by = ? WHERE id = ?", (step, status, due, json.dumps(submitted), now(), by, cid))
+        _event(con, cid, by, "step.set", {"from": c["current_step"], "to": step, "note": note[:300] or None, "due": due})
         return get_cycle(cid, con)
 
 
@@ -415,10 +421,10 @@ def mark_submitted(cid: int, step: str, by: str, summary: dict) -> dict:
 
 # ---------------------------------------------------------------- principal links
 
-def add_link(cid: int, token_hash: str, expires_at: str, by: str) -> dict:
+def add_link(cid: int, token_hash: str, expires_at: str, by: str, token_enc: str | None = None) -> dict:
     with connect() as con:
-        cur = con.execute("INSERT INTO principal_links (cycle_id, token_hash, created_at, created_by, expires_at) VALUES (?,?,?,?,?)",
-                          (cid, token_hash, now(), by, expires_at))
+        cur = con.execute("INSERT INTO principal_links (cycle_id, token_hash, created_at, created_by, expires_at, token_enc) "
+                          "VALUES (?,?,?,?,?,?)", (cid, token_hash, now(), by, expires_at, token_enc))
         _event(con, cid, by, "link.create", {"id": cur.lastrowid, "expires_at": expires_at})
         return _d(con.execute("SELECT id, cycle_id, created_at, created_by, expires_at, revoked_at, last_used_at "
                               "FROM principal_links WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -427,6 +433,18 @@ def add_link(cid: int, token_hash: str, expires_at: str, by: str) -> dict:
 def link_by_hash(token_hash: str) -> dict | None:
     with connect() as con:
         return _d(con.execute("SELECT * FROM principal_links WHERE token_hash = ?", (token_hash,)).fetchone())
+
+
+def latest_active_link(cid: int) -> dict | None:
+    with connect() as con:
+        return _d(con.execute(
+            "SELECT * FROM principal_links WHERE cycle_id = ? AND revoked_at IS NULL AND expires_at > ? AND token_enc IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1", (cid, now())).fetchone())
+
+
+def open_cycles() -> list[int]:
+    with connect() as con:
+        return [r[0] for r in con.execute("SELECT id FROM cycles WHERE status = 'open' ORDER BY id")]
 
 
 def touch_link(lid: int) -> None:
@@ -453,11 +471,16 @@ def revoke_link(cid: int, lid: int, by: str) -> None:
 # ---------------------------------------------------------------- outbox
 
 def queue_message(cid: int | None, event: str, recipient: str, payload: dict, by: str, status: str = "queued",
-                  error: str | None = None) -> int:
+                  error: str | None = None, dedupe: str | None = None) -> int | None:
+    """Queue one message. With ``dedupe``, a second message with the same key is ignored (returns None)."""
     with connect() as con:
-        cur = con.execute(
-            "INSERT INTO outbox (cycle_id, event, recipient, payload, status, last_error, created_at, created_by, next_try_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?)", (cid, event, recipient, json.dumps(payload, default=str), status, error, now(), by, now()))
+        try:
+            cur = con.execute(
+                "INSERT INTO outbox (cycle_id, event, recipient, payload, status, last_error, created_at, created_by, next_try_at, dedupe) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (cid, event, recipient, json.dumps(payload, default=str), status, error, now(), by, now(), dedupe))
+        except sqlite3.IntegrityError:
+            return None
         if cid:
             _event(con, cid, by, f"message.{status}", {"id": cur.lastrowid, "event": event, "to": recipient, "error": error})
         return cur.lastrowid
@@ -836,3 +859,8 @@ def delete_document(cid: int, did: int, by: str) -> dict | None:
             con.execute("UPDATE cycle_documents SET deleted_at = ? WHERE id = ?", (now(), did))
             _event(con, cid, by, "document.delete", {"id": did, "file": d["filename"]})
         return d
+
+
+def has_message(dedupe: str) -> bool:
+    with connect() as con:
+        return con.execute("SELECT 1 FROM outbox WHERE dedupe = ?", (dedupe,)).fetchone() is not None
