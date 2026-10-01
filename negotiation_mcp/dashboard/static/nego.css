@@ -150,3 +150,14 @@ table.items td.flags { display: flex; gap: 4px; align-items: center; }
 .mstat { font-weight: 700; }
 .mstat.s-sent { color: var(--good); } .mstat.s-failed { color: var(--critical); } .mstat.s-skipped { color: var(--warning); } .mstat.s-queued, .mstat.s-sending { color: var(--text-secondary); }
 .act-title { margin: 6px 0 8px; }
+.reason-note.co { background: color-mix(in srgb, var(--breeze) 35%, var(--surface-1)); }
+.bm-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.bm { display: flex; justify-content: space-between; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; font-size: 13px; }
+.bm.st-rejected { opacity: .55; text-decoration: line-through; }
+.bm.st-confirmed { box-shadow: inset 3px 0 0 var(--good); }
+.bm-table td { vertical-align: top; font-size: 13px; }
+.esc { border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-breeze); }
+.esc.need { box-shadow: inset 4px 0 0 var(--sunset); }
+.esc.ok { box-shadow: inset 4px 0 0 var(--good); }
+.esc ul { margin: 6px 0 0; }
+.progress-form textarea { min-width: 0; width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }

@@ -51,7 +51,7 @@ def _norm(h: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(h or "").lower()).strip()
 
 
-def map_headers(headers: list[str], wanted: tuple[str, ...]) -> dict[str, int]:
+def map_headers(headers: list[str], wanted: tuple[str, ...], synonyms: dict | None = None) -> dict[str, int]:
     """field -> column index. Exact synonym matches first, then 'header starts with synonym'."""
     normed = [_norm(h) for h in headers]
     out: dict[str, int] = {}
@@ -60,7 +60,7 @@ def map_headers(headers: list[str], wanted: tuple[str, ...]) -> dict[str, int]:
         for field in wanted:
             if field in out:
                 continue
-            for syn in SYNONYMS.get(field, (field.replace("_", " "),)):
+            for syn in (synonyms or SYNONYMS).get(field, (field.replace("_", " "),)):
                 hit = next((i for i, h in enumerate(normed) if i not in taken and
                             (h == syn if exact else (h.startswith(syn + " ") or h.endswith(" " + syn)))), None)
                 if hit is not None:

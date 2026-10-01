@@ -116,5 +116,6 @@ PRINCIPAL_STEP_FIELDS: dict[str, tuple[str, ...]] = {
     "identification": ("brand", "catalog_no", "item_status", "remarks"),
     "rfq": ("item_status", "rfq_qty", "rfq_hna", "rfq_disc", "price_reason", "remarks"),
     "feedback1": ("fb1_disc", "price_reason", "remarks"),
+    "submission": (),  # documents only; see portal.upload_document
 }
 PCT_FIELDS = tuple(c.field for c in COLUMNS if c.kind == "pct")

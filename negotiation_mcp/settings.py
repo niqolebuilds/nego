@@ -73,6 +73,12 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("check_drop", "Ask the principal to confirm a price drop larger than", "Principal negotiations", 0.40, "fraction", 0.05, 1),
     Setting("check_high_disc", "Ask the principal to confirm a discount above", "Principal negotiations", 0.60, "fraction", 0.05, 0.99),
     Setting("principal_link_days", "Principal link stays valid for (days)", "Principal negotiations", 14, "int", 1, 90),
+    Setting("co_max_extra", "Counter offer asks at most this many extra discount points over the quote", "Principal negotiations",
+            0.25, "fraction", 0, 0.9, "Keeps the counter credible; anything beyond goes to Online Nego."),
+    Setting("anomaly_benchmark_deviation", "Price above the market benchmark that raises a flag", "Principal negotiations", 0.05,
+            "fraction", 0, 1),
+    Setting("escalation_impact", "Escalate when agreed prices cost more than the MOU by (Rp a year)", "Principal negotiations", 0,
+            "number", 0, 1e13, "0 = any net increase needs sign-off."),
     Setting("llm_fallback", "Send questions the built-in parser can't understand to Claude", "Assistant", False, "bool",
             help="Needs ANTHROPIC_API_KEY on the server. Question text and engine results would be sent to Anthropic."),
 )

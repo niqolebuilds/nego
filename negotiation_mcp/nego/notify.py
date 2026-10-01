@@ -43,6 +43,7 @@ STEP_TEXT = {
     "identification": ("Konfirmasi data item", "Confirm item details"),
     "rfq": ("Isi harga penawaran (RFQ)", "Quote your prices (RFQ)"),
     "feedback1": ("Tanggapi counter offer Siloam", "Respond to Siloam's counter offer"),
+    "submission": ("Kirim dokumen perusahaan", "Send company documents"),
 }
 BULAN = ("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November",
          "Desember")

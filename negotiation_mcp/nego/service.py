@@ -25,7 +25,8 @@ def ppn() -> float:
 def thresholds() -> dict:
     v = S.load()
     return {"increase_tolerance": v["anomaly_increase_tolerance"], "po_deviation": v["anomaly_po_deviation"],
-            "outlier_z": v["anomaly_outlier_z"], "review_top_n": v["anomaly_review_top_n"]}
+            "outlier_z": v["anomaly_outlier_z"], "review_top_n": v["anomaly_review_top_n"],
+            "benchmark_deviation": v["anomaly_benchmark_deviation"]}
 
 
 def months_between(today: date, end: date) -> float:
@@ -50,7 +51,7 @@ def steps() -> list[dict]:
 
 def scan(cid: int) -> dict:
     c = store.require_cycle(cid)
-    findings = A.scan(store.items(cid), c["current_step"], ppn(), thresholds())
+    findings = A.scan(store.items(cid), c["current_step"], ppn(), thresholds(), store.best_benchmarks(cid))
     res = store.sync_anomalies(cid, findings)
     return res
 
@@ -63,7 +64,14 @@ def overview(cid: int) -> dict:
             "events": store.cycle_events(cid, 30), "ppn": p,
             "columns": [{"letter": col.letter, "field": col.field, "header": col.header, "section": col.section,
                          "kind": col.kind, "who": col.who} for col in M.COLUMNS],
-            "sections": M.SECTION_TITLES}
+            "sections": M.SECTION_TITLES, "escalation": _escalation(cid), "documents": len(store.documents(cid)),
+            "benchmark_review": sum(1 for m in store.matches(cid, "suggested"))}
+
+
+def _escalation(cid: int) -> dict:
+    from .negotiate import escalation
+
+    return escalation(cid)
 
 
 FILTERS = ("all", "anomalies", "increase", "decrease", "no_mou", "no_rfq", "discontinued")
@@ -80,6 +88,10 @@ def item_page(cid: int, q: str = "", flt: str = "all", offset: int = 0, limit: i
             open_by_item.setdefault(a["item_id"], []).append(
                 {"id": a["id"], "rule": a["rule"], "label": A.rule_label(a["rule"]), "severity": a["severity"]})
     rows = [enrich(i, p) for i in store.items(cid)]
+    bench = store.best_benchmarks(cid)
+    for r in rows:
+        b = bench.get(r["id"])
+        r["bench_pp"], r["bench_source"] = (b["price_pp"], b["source"]) if b else (None, None)
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in " ".join(str(r.get(f) or "") for f in ("erp_code", "item_name", "brand", "catalog_no")).lower()]
@@ -117,6 +129,7 @@ def item_detail(cid: int, item_id: int) -> dict:
     out = enrich(it, ppn())
     out["anomalies"] = [{**a, "label": A.rule_label(a["rule"])} for a in store.anomalies(cid, item_id=item_id)]
     out["history"] = store.item_history(item_id)
+    out["benchmarks"] = [m for m in store.matches(cid) if m["item_id"] == item_id and m["status"] != "rejected"]
     return out
 
 

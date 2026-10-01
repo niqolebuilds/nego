@@ -157,6 +157,22 @@ def main() -> None:
                     po.append({"PO Date": d.strftime("%d/%m/%Y"), "Hospital": hosp, "Vendor Name": name.upper() if rng.random() < 0.2 else name,
                                "Item Number": it["erp_code"], "Item Description": it["item_name"], "Purch Unit": unit_text,
                                "Quantity": qty, "Unit Price": round(price, 2), "Line Amount": round(price * qty, 2)})
+    # Market benchmark (fictional INAPROC-style export) for the first principal: some rows carry the
+    # catalogue number, some only a name in a different word order, prices per pack incl. PPN.
+    first = PRINCIPALS[0][0]
+    bench = []
+    for row in mou:
+        if row["Principal"] != first or rng.random() < 0.35:
+            continue
+        piece = row["MOU_HNA/PO Unit (excl. PPN)"] * (1 - row["MOU_Disc%"]) / row["MOU_Qty/PO Unit"] * 1.11
+        pack = row["MOU_Qty/PO Unit"]
+        words = row["Item Name"].split()
+        name = " ".join(words[1:] + words[:1]) if rng.random() < 0.5 else row["Item Name"].upper()
+        bench.append({"Nama Produk": name, "Merek": row["Brand"],
+                      "No Katalog": row["Catalog No. (REF)"] if rng.random() < 0.6 else "",
+                      "Satuan": f"BOX isi {pack}" if pack > 1 else "PCS",
+                      "Harga": round(piece * pack * rng.uniform(0.82, 1.08), -1), "Tanggal": "2026-08-15"})
+    write(OUT / "inaproc_sample.csv", bench)
     po.sort(key=lambda r: (r["PO Date"][6:] + r["PO Date"][3:5] + r["PO Date"][:2]))
     write(OUT / "principals.csv", principals)
     write(OUT / "po_export.csv", po)

@@ -13,11 +13,14 @@ const T = {
     portal: "Portal Principal Siloam", loading: "Memuat…",
     invalid_t: "Tautan tidak berlaku", invalid_p: "Tautan ini sudah kedaluwarsa atau dicabut. Minta tautan baru ke tim pengadaan Siloam.",
     step_of: (n) => `Langkah ${n} dari 6`,
-    steps: { identification: "Konfirmasi data item", rfq: "Isi harga penawaran (RFQ)", feedback1: "Tanggapi counter offer Siloam" },
+    steps: { identification: "Konfirmasi data item", rfq: "Isi harga penawaran (RFQ)", feedback1: "Tanggapi counter offer Siloam", submission: "Kirim dokumen perusahaan" },
+    last_step: "Langkah terakhir", doc_required: "Wajib", doc_optional: "Opsional", doc_upload: "Unggah", doc_uploaded: "Terunggah", doc_delete: "Hapus",
+    doc_note: "Dokumen disimpan terenkripsi dan hanya bisa dibuka tim pengadaan Siloam. PDF, JPG, PNG, DOCX, XLSX atau ZIP, maksimal 15 MB per file.",
     howto: {
       identification: ["Periksa brand dan nomor katalog (REF) setiap SKU.", "Pilih Aktif jika masih dijual, atau Tidak dijual lagi.", "Semua tersimpan otomatis. Klik Kirim ke Siloam jika sudah selesai."],
       rfq: ["Harga MOU saat ini ditampilkan sebagai acuan. Jika harga tidak berubah, klik Sama dengan MOU.", "Isi HNA per kemasan (sebelum PPN), isi per kemasan, dan diskon dalam %.", "Jika harga per pcs naik, mohon isi alasannya. Semua tersimpan otomatis."],
       feedback1: ["Siloam mengirim counter offer berupa diskon per SKU.", "Klik Terima, atau isi diskon Anda sendiri dan alasannya.", "Klik Kirim ke Siloam jika sudah selesai."],
+      submission: ["Harga sudah disepakati. Langkah terakhir: unggah dokumen perusahaan.", "Dokumen bertanda Wajib harus diunggah sebelum mengirim.", "Klik Kirim ke Siloam jika sudah lengkap."],
     },
     contract: "Kontrak", due: "Batas waktu", progress: (d, a) => `${d} dari ${a} SKU selesai`,
     download: "Unduh Excel", upload: "Unggah Excel", send: "Kirim ke Siloam",
@@ -49,11 +52,14 @@ const T = {
     portal: "Siloam Principal Portal", loading: "Loading…",
     invalid_t: "Link not valid", invalid_p: "This link has expired or was revoked. Ask Siloam's procurement team for a new one.",
     step_of: (n) => `Step ${n} of 6`,
-    steps: { identification: "Confirm item details", rfq: "Quote your prices (RFQ)", feedback1: "Respond to Siloam's counter offer" },
+    steps: { identification: "Confirm item details", rfq: "Quote your prices (RFQ)", feedback1: "Respond to Siloam's counter offer", submission: "Send company documents" },
+    last_step: "Last step", doc_required: "Required", doc_optional: "Optional", doc_upload: "Upload", doc_uploaded: "Uploaded", doc_delete: "Delete",
+    doc_note: "Documents are stored encrypted and only Siloam's procurement team can open them. PDF, JPG, PNG, DOCX, XLSX or ZIP, up to 15 MB each.",
     howto: {
       identification: ["Check the brand and catalogue number (REF) of every SKU.", "Choose Active if you still sell it, or Discontinued.", "Everything saves automatically. Click Send to Siloam when you're done."],
       rfq: ["The current MOU price is shown for reference. If the price doesn't change, click Same as MOU.", "Enter the HNA per pack (before PPN), the pieces per pack and the discount in %.", "If the price per piece goes up, please give the reason. Everything saves automatically."],
       feedback1: ["Siloam sent a counter-offer discount for each SKU.", "Click Accept, or enter your own discount and the reason.", "Click Send to Siloam when you're done."],
+      submission: ["Prices are agreed. Last step: upload your company documents.", "Documents marked Required must be uploaded before sending.", "Click Send to Siloam when everything is there."],
     },
     contract: "Contract", due: "Due", progress: (d, a) => `${d} of ${a} SKUs done`,
     download: "Download Excel", upload: "Upload Excel", send: "Send to Siloam",
@@ -177,17 +183,16 @@ function render() {
   const prog = el("div", { class: "prog" }, el("div", { class: "bar" }, el("i", { id: "prog-fill" })), el("span", { id: "prog-text" }));
   put(app, 
     el("section", { class: "pcard stepcard" },
-      el("p", { class: "eyebrow", text: t("step_of", me.step_no) }),
+      el("p", { class: "eyebrow", text: me.step_no >= 7 ? t("last_step") : t("step_of", me.step_no) }),
       el("h1", { text: t(`steps.${me.step}`) }),
       el("p", { class: "muted", text: `${t("contract")} ${fmtDate(me.contract.start)} – ${fmtDate(me.contract.end)}${me.due ? ` · ${t("due")} ${fmtDate(me.due)}` : ""}` }),
       howto, prog,
       el("div", { class: "pactions" },
         el("button", { type: "button", class: "pbtn primary", text: t("send"), onclick: openSummary }),
-        el("a", { class: "pbtn", href: "/api/p/template.xlsx", text: t("download") }),
-        el("button", { type: "button", class: "pbtn", text: t("upload"), onclick: openUpload }))),
-    toolbar(),
-    el("div", { id: "list", class: `skus view-${P.view}` }),
-    el("div", { id: "more" }));
+        me.step === "submission" ? null : el("a", { class: "pbtn", href: "/api/p/template.xlsx", text: t("download") }),
+        me.step === "submission" ? null : el("button", { type: "button", class: "pbtn", text: t("upload"), onclick: openUpload }))));
+  if (me.step === "submission") { prog.hidden = true; put(app, el("section", { class: "pcard", id: "docs" })); loadDocs(); return; }
+  put(app, toolbar(), el("div", { id: "list", class: `skus view-${P.view}` }), el("div", { id: "more" }));
   load(true);
 }
 
@@ -435,6 +440,35 @@ async function save(a, it, changes, rerender = false, confirmCode = null) {
   }
 }
 
+// ---------- documents (last step) ----------
+async function loadDocs() {
+  let d;
+  try { d = await call("/api/p/documents"); } catch (e) { toast(e.message); return; }
+  drawDocs(d);
+}
+
+function drawDocs(d) {
+  const box = clear($("docs"));
+  put(box, el("p", { class: "muted", text: t("doc_note") }));
+  const list = el("div", { class: "doclist-p" });
+  for (const ty of d.types) {
+    const mine = d.documents.filter((x) => x.doc_type === ty.key);
+    const file = el("input", { type: "file", accept: ".pdf,.jpg,.jpeg,.png,.docx,.xlsx,.zip", class: "sr-only", id: `f-${ty.key}` });
+    file.addEventListener("change", async () => {
+      if (!file.files.length) return;
+      const fd = new FormData(); fd.append("file", file.files[0]); fd.append("doc_type", ty.key);
+      try { drawDocs(await call("/api/p/documents", { method: "POST", form: fd })); toast(t("doc_uploaded")); } catch (e) { toast(e.message); }
+    });
+    put(list, el("div", { class: `docrow ${mine.length ? "have" : ty.required ? "need" : ""}` },
+      el("div", {}, el("b", { text: ty[P.lang] }), el("span", { class: `tag ${ty.required ? "req" : ""}`, text: ty.required ? t("doc_required") : t("doc_optional") }),
+        mine.map((x) => el("div", { class: "small" }, `✓ ${x.filename} `,
+          el("button", { type: "button", class: "pbtn small ghost", text: t("doc_delete"), onclick: async () => {
+            try { drawDocs(await call(`/api/p/documents/${x.id}`, { method: "DELETE" })); } catch (e) { toast(e.message); } } })))),
+      el("label", { class: "pbtn small", for: `f-${ty.key}` }, t("doc_upload")), file));
+  }
+  put(box, list);
+}
+
 // ---------- send ----------
 async function openSummary() {
   let s;
@@ -452,7 +486,8 @@ async function openSummary() {
       render();
     } catch (e) { toast(e.message); sendBtn.disabled = false; }
   });
-  const facts = [["sum_items", s.items], ["sum_done", s.done], ["sum_missing", s.missing], ["sum_check", s.to_check], ["sum_disc", s.discontinued]];
+  const facts = s.step === "submission" ? [["doc_uploaded", s.documents], ["sum_missing", s.missing]]
+    : [["sum_items", s.items], ["sum_done", s.done], ["sum_missing", s.missing], ["sum_check", s.to_check], ["sum_disc", s.discontinued]];
   const body = clear($("dlg-body"));
   put(body, el("h2", { text: t("sum_t") }),
     el("div", { class: "facts" }, facts.map(([k, v]) => el("div", { class: k === "sum_missing" && v ? "bad" : k === "sum_check" && v ? "warn" : "" }, el("span", { text: t(k) }), el("b", { text: num(v) })))),
@@ -460,7 +495,7 @@ async function openSummary() {
       el("ul", { class: "left" }, s.outstanding.map((o) => el("li", {},
         el("div", {}, el("b", { text: o.item_name }), el("span", { class: "muted", text: ` ${o.erp_code || ""}` }),
           el("div", { class: "small", text: o.issues.map((i) => msg(i)).join(" ") })),
-        el("button", { type: "button", class: "pbtn small", text: t("sum_fix"), onclick: () => { $("dlg").close(); P.filter = "all"; P.q = o.erp_code || o.item_name; render(); } }))))) :
+        el("button", { type: "button", class: "pbtn small", text: t("sum_fix"), onclick: () => { $("dlg").close(); if (s.step !== "submission") { P.filter = "all"; P.q = o.erp_code || o.item_name; render(); } } }))))) :
       el("p", { class: "okline", text: `✓ ${t("sum_ok")}` }),
     s.increase_count ? el("details", {}, el("summary", { text: `${t("sum_up")} (${num(s.increase_count)})` }),
       el("ul", { class: "left" }, s.increases.map((x) => el("li", {}, el("div", {}, el("b", { text: x.item_name }),

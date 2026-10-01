@@ -34,14 +34,15 @@ DISC_FIELDS = ("mou_disc", "rfq_disc", "co_disc", "fb1_disc", "on_disc")
 AFTER_RFQ = {"counter_offer", "feedback1", "online_nego", "submission", "closed"}
 ADMIN_DISC_FOR_STEP = {"online_nego": "on_disc", "submission": "on_disc", "closed": "on_disc"}
 
-DEFAULTS = {"increase_tolerance": 0.005, "po_deviation": 0.10, "outlier_z": 3.5, "review_top_n": 3}
+DEFAULTS = {"increase_tolerance": 0.005, "po_deviation": 0.10, "outlier_z": 3.5, "review_top_n": 3, "benchmark_deviation": 0.05}
 
 
 def _f(label: str, value: float) -> str:
     return f"{label} {value:+.1%}"
 
 
-def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, thresholds: dict | None = None) -> list[dict]:
+def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, thresholds: dict | None = None,
+         benchmarks: dict | None = None) -> list[dict]:
     th = {**DEFAULTS, **(thresholds or {})}
     out: list[dict] = []
 
@@ -140,6 +141,14 @@ def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, t
                 msg += f" Principal's reason: {raw['price_reason']}"
             add(raw, "price_increase", "medium", msg, detail={"stage": stage, "change": latest / mou - 1}, **extra)
 
+        # market benchmark (confirmed matches only), checked before anything is agreed
+        bm = (benchmarks or {}).get(raw.get("id"))
+        if bm and latest and latest > bm["price_pp"] * (1 + th["benchmark_deviation"]):
+            add(raw, "above_benchmark", "medium",
+                f"{ {'rfq': 'RFQ', 'co': 'Counter offer', 'fb1': 'Feedback I', 'on': 'Online nego'}[stage]} is "
+                f"{latest / bm['price_pp'] - 1:+.1%} above the {bm['source']} benchmark ({bm['price_pp']:,.0f}/pc, {bm['name'][:60]}).",
+                detail={"benchmark": bm["price_pp"], "source": bm["source"]})
+
         # list problems
         if raw.get("item_status") == "Discontinue" and (raw.get("rfq_hna") is not None or raw.get("on_disc") is not None):
             add(raw, "discontinued_priced", "low", "Marked Discontinue but has a price. It will be left out of the BAK unless "
@@ -189,6 +198,7 @@ RULE_LABELS = {
     "discontinued_priced": "Discontinued but priced",
     "rfq_missing": "No RFQ price",
     "extreme_change": "Largest / smallest change",
+    "above_benchmark": "Above market benchmark",
 }
 
 

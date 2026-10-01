@@ -231,7 +231,7 @@ async function ngCycle(cid, tab) {
     ng.page = { q: "", filter: "all", sort: "sort", offset: 0 };
   }
   ng.cid = cid;
-  ng.tab = ["items", "findings", "files", "activity"].includes(tab) ? tab : "items";
+  ng.tab = ["items", "findings", "negotiate", "files", "activity"].includes(tab) ? tab : "items";
   try { ng.ov = await api(`/api/nego/cycles/${cid}`); } catch (e) { clear(page).append(el("p", { class: "error pad", text: e.message }), el("a", { href: "#nego", text: "← All principals" })); return; }
   renderCycle();
 }
@@ -245,7 +245,7 @@ function renderCycle() {
   const page = clear($("nego"));
   const c = ng.ov.cycle;
   const tabs = el("nav", { class: "subtabs", "aria-label": "Negotiation sections" },
-    [["items", "Items"], ["findings", "Findings"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
+    [["items", "Items"], ["findings", "Findings"], ["negotiate", "Negotiate"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
       el("a", { href: `#nego/${c.id}/${k}`, class: ng.tab === k ? "on" : null, "data-tab": k }, label, k === "findings" ? el("span", { class: "count", id: "ng-find-count" }) : null)));
   page.append(
     el("a", { class: "back", href: "#nego", text: "← All principals" }),
@@ -264,7 +264,7 @@ function renderCycle() {
     tabs,
     el("div", { id: "ng-body" }));
   renderHeaderParts();
-  ({ items: renderItems, findings: renderFindings, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
+  ({ items: renderItems, findings: renderFindings, negotiate: renderNegotiate, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
 }
 
 function renderHeaderParts() {
@@ -419,8 +419,9 @@ async function loadItems(wrap, pager) {
   const cols = ng.ov.columns.reduce((m, c) => { m[c.field] = c; return m; }, {});
   t.append(el("thead", {},
     el("tr", { class: "sec" }, sections.map((x) => el("th", { colspan: x.n, class: SECTION_CLASS[x.sec], text: SECTION_SHORT[x.sec] })),
-      el("th", { colspan: 3, class: "sec-eng", text: "Engine" })),
+      el("th", { colspan: 4, class: "sec-eng", text: "Engine" })),
     el("tr", {}, ITEM_COLS.map(([fld, label, , kind]) => el("th", { class: `${kind !== "text" ? "num" : ""} ${fld === "item_name" ? "namecol" : ""} ${fld === "erp_code" ? "codecol" : ""}`, text: label, title: (cols[fld] || {}).header || label })),
+      el("th", { class: "num", text: "Market/pc", title: "Lowest confirmed market benchmark per piece incl. PPN" }),
       el("th", { class: "num", text: "vs MOU" }), el("th", { class: "num", text: "Impact/yr" }), el("th", { text: "Findings" }))));
   const tb = el("tbody");
   for (const it of d.items) {
@@ -434,6 +435,7 @@ async function loadItems(wrap, pager) {
       tr.append(el("td", { class: cls, text: cellValue(kind, it[fld]), title: fld === "item_name" ? it.item_name : null }));
     }
     const ch = it.change_pct;
+    tr.append(el("td", { class: "num", text: it.bench_pp == null ? "" : num(it.bench_pp, it.bench_pp < 100 ? 2 : 0), title: it.bench_source || null }));
     tr.append(el("td", { class: `num ${ch > 0.0005 ? "up" : ch < -0.0005 ? "down" : ""}`, text: ch == null ? "" : `${ch > 0 ? "+" : ""}${pct(ch)}` }));
     tr.append(el("td", { class: `num ${it.impact > 0 ? "up" : it.impact < 0 ? "down" : ""}`, text: it.impact == null ? "" : `${it.impact > 0 ? "+" : ""}${money(it.impact)}` }));
     tr.append(el("td", { class: "flags" }, it.flags.slice(0, 2).map((x) => el("span", { class: `sev ${x.severity}`, text: x.label })),
@@ -475,7 +477,11 @@ async function openItem(id) {
       .map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: v }))));
   const findings = el("div", { class: "findings" });
   renderFindingList(findings, it.anomalies.filter((a) => a.status !== "cleared"), () => openItem(id), true);
-  const reason = it.price_reason ? el("p", { class: "reason-note" }, el("b", { text: "Principal's reason: " }), it.price_reason) : null;
+  const reason = el("div", {},
+    it.price_reason ? el("p", { class: "reason-note" }, el("b", { text: "Principal's reason: " }), it.price_reason) : null,
+    it.co_note ? el("p", { class: "reason-note co" }, el("b", { text: "Counter offer basis: " }), it.co_note) : null,
+    it.benchmarks && it.benchmarks.length ? el("div", { class: "bm-list" }, el("b", { text: "Market benchmarks" }),
+      it.benchmarks.map((m) => benchRow(m, () => openItem(id)))) : null);
 
   const form = el("form", { class: "progress-form item-form" });
   const inputs = {};
@@ -779,4 +785,142 @@ async function linkPanel(c) {
     el("form", { class: "progress-form", onsubmit: (e) => e.preventDefault() }, field("Valid for (days)", days), el("div", { class: "actions" }, create)),
     out, el("h3", { text: "Links" }), list);
   try { draw((await api(`/api/admin/nego/cycles/${c.id}/links`)).links); } catch (e) { list.append(el("p", { class: "error", text: e.message })); }
+}
+
+// ---------- negotiate: counter offer, benchmarks, online nego, package ----------
+// Append children, skipping null/false (Element.append would print them as text).
+const put = (n, ...kids) => { n.append(...kids.flat(2).filter((k) => k != null && k !== false)); return n; };
+
+function benchRow(m, after) {
+  return el("div", { class: `bm st-${m.status}` },
+    el("div", {}, el("b", { text: `${m.source}: ${unit(m.price_pp)}/pc` }), el("span", { class: "small muted", text: ` · ${m.bm_name}${m.bm_unit ? ` (${m.bm_unit})` : ""}` }),
+      el("div", { class: "small muted", text: `Match ${pct(m.confidence, 0)} by ${m.method === "ref" ? "catalogue no." : m.method === "remembered" ? "earlier confirmation" : "name"} · ${m.status === "confirmed" ? "confirmed" : m.status === "rejected" ? "rejected" : "to review"}` })),
+    isAdmin() ? el("div", { class: "actions" },
+      m.status !== "confirmed" ? act("Confirm", () => decideBench(m.id, "confirm", after), "ghost") : null,
+      m.status !== "rejected" ? act("Not the same", () => decideBench(m.id, "reject", after), "ghost") : null) : null);
+}
+
+async function decideBench(mid, decision, after) {
+  try { await send(`/api/admin/nego/cycles/${ng.cid}/benchmarks/${mid}`, "POST", { decision }); await refreshOverview(); after(); }
+  catch (e) { toast(e.message); }
+}
+
+async function renderNegotiate(body) {
+  clear(body);
+  const c = ng.ov.cycle;
+  const coBox = el("div"), bmBox = el("div"), onBox = el("div"), pkBox = el("div");
+  put(body, 
+    card("4 · Counter offer", "The engine proposes a counter-offer discount per item: down to the lowest of the MOU price, Siloam's last PO price and a confirmed market benchmark. It never asks for less than the principal quoted, and at most the set number of extra points (Engine settings).", coBox),
+    card("Market benchmarks", "INAPROC e-Katalog, SIMO Inhealth or any price list your team can legitimately use. The app matches rows to items by catalogue no. and name; strong matches are confirmed automatically, the rest wait for you. Principals never see benchmarks.", bmBox),
+    card("6 · Online Nego", "After the meeting, record what was agreed. Start from the principal's Feedback I discount (else the counter offer) and edit items in the Items tab.", onBox),
+    card("Submission package", "The agreed prices as Excel Confirmation and BAK draft (by binding), active items only, A–Z, no duplicate ERP codes. Company documents the principal sends at the last step are encrypted and only admins can open them.", pkBox));
+  drawCO(coBox); drawBench(bmBox); drawOn(onBox, c); drawPackage(pkBox);
+}
+
+async function drawCO(box) {
+  put(clear(box), el("p", { class: "muted small", text: "Working out suggestions…" }));
+  let plan;
+  try { plan = await api(`/api/nego/cycles/${ng.cid}/co-plan`); } catch (e) { put(clear(box), el("p", { class: "error", text: e.message })); return; }
+  const k = ng.ov.kpis.stages;
+  const rfq = k.find((s) => s.key === "rfq"), co = k.find((s) => s.key === "co");
+  const facts = el("div", { class: "facts" },
+    [["Items with an RFQ", num(rfq.items)], ["RFQ impact a year", rfq.impact == null ? "—" : `${rfq.impact > 0 ? "+" : ""}${money(rfq.impact)}`],
+      ["Counter offers set", num(co.items)], ["Counter offer impact", co.impact == null ? "—" : `${co.impact > 0 ? "+" : ""}${money(co.impact)}`],
+      ["New suggestions", num(plan.count)], ["Impact if applied", plan.co_impact == null ? "—" : `${plan.co_impact > 0 ? "+" : ""}${money(plan.co_impact)}`]]
+      .map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: v }))));
+  const sample = plan.suggestions.slice(0, 5).map((s) => el("li", { class: "small", text: `${pct(s.co_disc, 1)} — ${s.note}` }));
+  put(clear(box), facts, sample.length ? el("details", {}, el("summary", { text: "Examples" }), el("ul", {}, sample)) : null,
+    isAdmin() ? el("div", { class: "actions" },
+      plan.count ? act(`Apply ${num(plan.count)} suggestions`, async () => {
+        try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/co`, "POST", { overwrite: false }); toast(`${r.applied} counter offers set`); await refreshOverview(); drawCO(box); } catch (e) { toast(e.message); }
+      }) : el("span", { class: "small muted", text: "Every item with an RFQ already has a counter offer." }),
+      co.items ? act("Recalculate all", async () => {
+        if (!confirm("Replace every counter-offer discount with a fresh suggestion?")) return;
+        try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/co`, "POST", { overwrite: true }); toast(`${r.applied} counter offers recalculated`); await refreshOverview(); drawCO(box); } catch (e) { toast(e.message); }
+      }, "ghost") : null) : null);
+}
+
+async function drawBench(box) {
+  const file = el("input", { type: "file", accept: ".csv,.xlsx", class: "sr-only", name: "file" });
+  const source = el("select", { name: "source" }, ["INAPROC e-Katalog", "SIMO Inhealth", "Other price list"].map((v) => el("option", { value: v, text: v })));
+  const incl = el("input", { type: "checkbox", name: "incl_ppn", checked: "" });
+  const out = el("div", { role: "status" });
+  const review = el("div");
+  clear(box);
+  if (isAdmin()) {
+    const form = el("form", { class: "upload-form wide" },
+      el("div", { class: "row3" }, el("label", {}, "Source", source), el("label", { class: "check" }, incl, "Prices include PPN"), el("span")),
+      dropZone(file, "Benchmark file (.csv or .xlsx)"),
+      el("div", { class: "actions" }, el("button", { type: "submit", class: "act", text: "Import and match" }),
+        act("Match again", async () => { try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/benchmarks/match`, "POST", {}); toast(`${r.items_matched} items matched · ${r.to_review} to review`); await refreshOverview(); drawBench(box); } catch (e) { toast(e.message); } }, "ghost")),
+      out);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!file.files.length) { put(clear(out), el("p", { class: "error", text: "Choose a file first." })); return; }
+      const fd = new FormData(); fd.append("file", file.files[0]); fd.append("source", source.value); fd.append("incl_ppn", incl.checked ? "1" : "0");
+      put(clear(out), el("p", { class: "muted", text: "Importing…" }));
+      try {
+        const r = await upload("/api/admin/nego/benchmarks", fd);
+        const m = await send(`/api/admin/nego/cycles/${ng.cid}/benchmarks/match`, "POST", {});
+        toast(`${r.rows} rows imported · ${m.items_matched} items matched · ${m.to_review} to review`);
+        await refreshOverview(); drawBench(box);
+      } catch (ex) { put(clear(out), el("p", { class: "error", text: ex.message })); }
+    });
+    put(box, form);
+  }
+  put(box, review);
+  let d;
+  try { d = await api(`/api/nego/cycles/${ng.cid}/benchmarks?status=suggested`); } catch (e) { put(review, el("p", { class: "error", text: e.message })); return; }
+  let conf = [];
+  try { conf = (await api(`/api/nego/cycles/${ng.cid}/benchmarks?status=confirmed`)).matches; } catch (_) { /* shown as 0 */ }
+  put(review, el("p", { class: "small", text: `${num(new Set(conf.map((m) => m.item_id)).size)} items have a confirmed benchmark · ${num(d.matches.length)} matches to review` }));
+  if (d.matches.length) {
+    const t = el("table", { class: "bm-table" });
+    table(t, [
+      { label: "Item", get: (m) => el("div", {}, el("b", { text: m.item_name }), el("div", { class: "small muted", text: [m.erp_code, m.item_brand].filter(Boolean).join(" · ") })) },
+      { label: "Benchmark", get: (m) => el("div", {}, m.bm_name, el("div", { class: "small muted", text: [m.source, m.bm_brand, m.bm_unit].filter(Boolean).join(" · ") })) },
+      { label: "Price/pc", num: true, get: (m) => unit(m.price_pp) },
+      { label: "Match", num: true, get: (m) => pct(m.confidence, 0) },
+      { label: "", get: (m) => isAdmin() ? el("div", { class: "actions" }, act("Same", () => decideBench(m.id, "confirm", () => drawBench(box)), "ghost"), act("Different", () => decideBench(m.id, "reject", () => drawBench(box)), "ghost")) : "" },
+    ], d.matches.slice(0, 40));
+    put(review, el("details", {}, el("summary", { text: `Review ${num(d.matches.length)} possible matches` }),
+      el("div", { class: "table-wrap" }, t), d.matches.length > 40 ? el("p", { class: "small muted", text: `Showing 40 of ${d.matches.length}. Confirm or reject these to see more.` }) : null));
+  }
+}
+
+function drawOn(box, c) {
+  const esc = ng.ov.escalation;
+  const at = el("input", { type: "datetime-local", value: c.meeting_at || null });
+  const notes = el("textarea", { rows: 3, placeholder: "Agreements, follow-ups, who attended" });
+  notes.value = c.meeting_notes || "";
+  put(clear(box), 
+    el("div", { class: `esc ${esc.needed ? "need" : esc.items_agreed ? "ok" : ""}` },
+      el("b", { text: !esc.items_agreed ? "No agreed prices yet" : esc.needed ? "Escalation needed before the BAK" : "Within limits: no escalation needed" }),
+      esc.items_agreed ? el("span", { class: "small", text: ` · ${num(esc.items_agreed)} items agreed · impact a year ${esc.impact > 0 ? "+" : ""}${money(esc.impact)}` }) : null,
+      esc.reasons.length ? el("ul", { class: "small" }, esc.reasons.map((r) => el("li", { text: r }))) : null),
+    isAdmin() ? el("form", { class: "progress-form", onsubmit: async (e) => {
+      e.preventDefault();
+      try { await send(`/api/admin/nego/cycles/${ng.cid}`, "PATCH", { meeting_at: at.value, meeting_notes: notes.value }); toast("Meeting saved"); await refreshOverview(); } catch (ex) { toast(ex.message); }
+    } }, el("div", { class: "row2" }, field("Meeting date and time", at), el("span")), field("Meeting notes", notes),
+      el("div", { class: "actions" }, el("button", { type: "submit", class: "act secondary", text: "Save meeting" }),
+        act("Fill agreed discounts (Feedback I, else counter offer)", async () => {
+          try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/on-fill`, "POST", { overwrite: false }); toast(`${r.filled} items filled`); await refreshOverview(); renderNegotiate($("ng-body")); } catch (e) { toast(e.message); }
+        }))) : el("p", { class: "small", text: c.meeting_notes || "No meeting recorded yet." }));
+}
+
+async function drawPackage(box) {
+  let chk;
+  try { chk = await api(`/api/nego/cycles/${ng.cid}/package`); } catch (e) { put(clear(box), el("p", { class: "error", text: e.message })); return; }
+  put(clear(box), el("div", { class: `preview ${chk.ready ? "ok" : "bad"}` },
+    el("h3", { text: chk.ready ? `Ready: ${num(chk.agreed)} agreed items` : `${num(chk.agreed)} agreed items — not ready yet` }),
+    chk.problems.length ? el("ul", { class: "errors" }, chk.problems.map((p) => el("li", { text: p }))) : null,
+    isAdmin() && chk.agreed ? el("div", { class: "actions" }, el("a", { class: "act", href: `/api/admin/nego/cycles/${ng.cid}/package.xlsx`, text: chk.ready ? "Download Confirmation & BAK draft" : "Download as draft" })) : null));
+  if (!isAdmin()) return;
+  let docs;
+  try { docs = await api(`/api/admin/nego/cycles/${ng.cid}/documents`); } catch (_) { return; }
+  put(box, el("h3", { text: "Company documents from the principal" }),
+    docs.documents.length ? el("ul", { class: "doclist" }, docs.documents.map((d) => el("li", {},
+      el("a", { href: `/api/admin/nego/cycles/${ng.cid}/documents/${d.id}`, text: `${d.label}: ${d.filename}` }),
+      el("span", { class: "small muted", text: ` · ${num(d.size / 1024, 0)} KB · ${new Date(d.uploaded_at).toLocaleString("en-GB")}` })))) :
+      el("p", { class: "small muted", text: "None yet. The principal uploads them at the last step (Submission). Each download is logged." }));
 }

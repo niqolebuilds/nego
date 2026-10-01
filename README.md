@@ -385,6 +385,38 @@ What a principal can reach is enforced on the server (`nego/portal.py`):
 
 Links can be revoked, and only their SHA-256 hash is stored.
 
+**After the RFQ: counter offer, benchmarks, Online Nego, submission (the Negotiate tab).**
+- **Counter offer:** one click proposes a CO discount per item. It brings the price per piece
+  down to the lowest credible reference: the MOU price (rule 1), Siloam's last PO price, or a
+  confirmed market benchmark.
+  - It never asks for less than the principal quoted.
+  - It asks for at most a set number of extra points (25 by default).
+  - Each item shows the reason.
+- **Market benchmarks:** import an INAPROC e-Katalog, SIMO Inhealth or other price-list export
+  (any headers, CSV or Excel).
+  - Prices become price per piece incl. PPN.
+  - Rows are matched to items by catalogue no., or by name and brand with size checks
+    (22G ≠ 24G).
+  - Strong matches are confirmed automatically, the rest wait for a person, and decisions are
+    remembered by ERP code.
+  - "Above market benchmark" joins Siloam's findings.
+  - Principals never see benchmarks.
+
+  The app imports files; it doesn't log in to those sites.
+- **Online Nego:** record the meeting, then fill the agreed discount from Feedback I (else the
+  counter offer) and edit what changed. If the agreed prices cost more than the MOU beyond the
+  escalation limit (Engine settings), the tab says escalation is needed.
+- **Submission package:** one Excel file with **Excel Confirmation**, **BAK Draft** (Nett or
+  Disc layout by binding) and **Checks**.
+  - It covers active items with an agreed price, A–Z, with no duplicate ERP codes.
+  - It's marked DRAFT while anything is missing.
+  - Siloam's own Confirmation and BAK templates can replace these layouts when they're provided.
+- **Company documents:** at the last step the principal uploads NIB and NPWP (required), plus
+  deeds, LoA and product registrations.
+  - Files are **encrypted at rest** (Fernet; key from `NEGO_DOC_KEY`, or a workspace key file
+    for pilots).
+  - Only admins can download them, and every download is logged.
+
 **Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
 open and prepare negotiations, edit items, decide findings, import, and move steps. **Sending the link automatically.** When an admin moves a negotiation to a principal step, the
 app can send the principal a fresh link by email and WhatsApp.
@@ -433,7 +465,8 @@ negotiation_mcp/
   nego/             principal negotiation cycles: model (steps, template columns, formula), uom,
                     store (nego.db), prepare, template_io, anomalies, impact, service, demo,
                     checks (principal-side checks, ID/EN), portal (links, allowlists, send),
-                    notify (outbox + webhook to Power Automate)
+                    notify (outbox + webhook to Power Automate), negotiate (counter offer, Online Nego,
+                    escalation, BAK/Confirmation package), benchmark (import + matching), vault (encrypted documents)
   templates/        Template_Nego.xlsx (the exact workbook used for export)
   dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, portal_routes.py, app.py;
                     static/ shell, chat, nego, renewals, admin, principal (the portal)
@@ -455,6 +488,7 @@ tests/
   test_nego.py          UOM, template formula, anomaly rules, prepare, Template_Nego round trip, roles
   test_portal.py        principal checks, field/response allowlists, links, sending, locked Excel
   test_notify.py        automatic link sending through a stub webhook: payload, signature, retry, redaction
+  test_negotiate.py     counter-offer rules, benchmark matching, Online Nego, escalation, package, encrypted documents
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```

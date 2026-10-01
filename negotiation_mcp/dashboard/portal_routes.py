@@ -149,6 +149,22 @@ async def template_post(request: Request, acc: dict) -> Response:
     return ok(portal.import_excel(acc["cycle"], content, _who(acc), apply))
 
 
+@guarded
+async def documents(_: Request, acc: dict) -> Response:
+    return ok(portal.documents_view(acc["cycle"]))
+
+
+@guarded
+async def document_upload(request: Request, acc: dict) -> Response:
+    form, filename, content = await _form_file(request, MAX_BYTES)
+    return ok(portal.upload_document(acc["cycle"], str(form.get("doc_type", "")), filename, content, _who(acc)))
+
+
+@guarded
+async def document_delete(request: Request, acc: dict) -> Response:
+    return ok(portal.delete_document(acc["cycle"], int(request.path_params["did"]), _who(acc)))
+
+
 def routes() -> list[Route]:
     return [
         Route("/p", page),
@@ -161,4 +177,7 @@ def routes() -> list[Route]:
         Route("/api/p/submit", submit, methods=["POST"]),
         Route("/api/p/template.xlsx", template_get),
         Route("/api/p/template", template_post, methods=["POST"]),
+        Route("/api/p/documents", documents),
+        Route("/api/p/documents", document_upload, methods=["POST"]),
+        Route("/api/p/documents/{did:int}", document_delete, methods=["DELETE"]),
     ]

@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from .. import appdb
 from ..engine import EngineError
-from ..nego import demo, notify, portal, service, store
+from ..nego import benchmark, demo, negotiate, notify, portal, service, store, vault
 from .admin import _form_file
 from .app import fail, ok
 
@@ -276,6 +276,121 @@ async def notify_test(request: Request) -> Response:
     return ok(res)
 
 
+# ---------------------------------------------------------------- benchmarks
+
+@handler
+async def benchmark_sources(_: Request) -> Response:
+    return ok({"sources": store.benchmark_sources()})
+
+
+@handler
+async def benchmark_upload(request: Request) -> Response:
+    form, filename, content = await _form_file(request, MAX_BYTES)
+    source = str(form.get("source") or "Benchmark").strip()[:60] or "Benchmark"
+    incl = str(form.get("incl_ppn", "1")).lower() in ("1", "true", "yes", "on")
+    res = benchmark.read_file(filename, content, source, incl, service.ppn(), _who(request))
+    appdb.audit(_who(request), "benchmark.import", {"file": filename, "source": source, "rows": res["rows"]})
+    return ok(res)
+
+
+@handler
+async def benchmark_match(request: Request) -> Response:
+    cid = _cid(request)
+    store.require_cycle(cid)
+    res = benchmark.match_cycle(cid)
+    res["scan"] = service.scan(cid)
+    return ok(res)
+
+
+@handler
+async def benchmark_matches(request: Request) -> Response:
+    cid = _cid(request)
+    store.require_cycle(cid)
+    status = request.query_params.get("status", "suggested")
+    if status not in ("", "suggested", "confirmed", "rejected"):
+        raise EngineError("Unknown status")
+    return ok({"matches": store.matches(cid, status or None)[:500]})
+
+
+@handler
+async def benchmark_decide(request: Request) -> Response:
+    cid = _cid(request)
+    body = await _json(request)
+    status = {"confirm": "confirmed", "reject": "rejected", "undo": "suggested"}.get(str(body.get("decision")))
+    if not status:
+        raise EngineError("Decision must be confirm, reject or undo")
+    store.decide_match(cid, int(request.path_params["mid"]), status, _who(request))
+    service.scan(cid)
+    return ok({"ok": True})
+
+
+# ---------------------------------------------------------------- counter offer, online nego, package
+
+@handler
+async def co_plan(request: Request) -> Response:
+    plan = negotiate.plan_co(_cid(request), request.query_params.get("overwrite") == "1")
+    plan["suggestions"] = plan["suggestions"][:300]
+    return ok(plan)
+
+
+@handler
+async def co_apply(request: Request) -> Response:
+    cid = _cid(request)
+    body = await _json(request)
+    res = negotiate.apply_co(cid, _who(request), bool(body.get("overwrite")))
+    res["scan"] = service.scan(cid)
+    return ok(res)
+
+
+@handler
+async def on_fill(request: Request) -> Response:
+    cid = _cid(request)
+    body = await _json(request)
+    res = negotiate.fill_on(cid, _who(request), bool(body.get("overwrite")))
+    res["scan"] = service.scan(cid)
+    return ok(res)
+
+
+@handler
+async def package_checks(request: Request) -> Response:
+    chk = negotiate.package_checks(_cid(request))
+    chk["agreed"] = len(chk["agreed"])
+    return ok(chk)
+
+
+@handler
+async def package_xlsx(request: Request) -> Response:
+    cid = _cid(request)
+    name, data, _ = negotiate.package_xlsx(cid)
+    appdb.audit(_who(request), "package.export", {"cycle": cid})
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@handler
+async def cycle_documents(request: Request) -> Response:
+    cid = _cid(request)
+    store.require_cycle(cid)
+    labels = {k: b for k, a, b, r in vault.DOC_TYPES}
+    docs = [{**{k: d[k] for k in ("id", "doc_type", "filename", "size", "uploaded_at", "uploaded_by", "sha256")},
+             "label": labels.get(d["doc_type"], d["doc_type"])} for d in store.documents(cid)]
+    return ok({"documents": docs, "required": sorted(vault.REQUIRED)})
+
+
+@handler
+async def cycle_document_get(request: Request) -> Response:
+    cid = _cid(request)
+    d = store.get_document(cid, int(request.path_params["did"]))
+    if not d:
+        raise EngineError("No such document")
+    data = vault.load(cid, d["stored_name"])
+    store.log_event(cid, _who(request), "document.view", {"id": d["id"], "file": d["filename"]})
+    appdb.audit(_who(request), "document.view", {"cycle": cid, "id": d["id"]})
+    return Response(data, media_type=d["content_type"] or "application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{d["filename"]}"', "Content-Security-Policy": "sandbox",
+                             "Cache-Control": "no-store"})
+
+
 def routes() -> list[Route]:
     return [
         Route("/api/nego/principals", principals),
@@ -302,6 +417,18 @@ def routes() -> list[Route]:
         Route("/api/admin/nego/cycles/{cid}/messages", message_list),
         Route("/api/admin/nego/cycles/{cid}/messages/{mid:int}/retry", message_retry, methods=["POST"]),
         Route("/api/admin/nego/notify", notify_status),
+        Route("/api/nego/benchmarks", benchmark_sources),
+        Route("/api/admin/nego/benchmarks", benchmark_upload, methods=["POST"]),
+        Route("/api/admin/nego/cycles/{cid}/benchmarks/match", benchmark_match, methods=["POST"]),
+        Route("/api/nego/cycles/{cid}/benchmarks", benchmark_matches),
+        Route("/api/admin/nego/cycles/{cid}/benchmarks/{mid:int}", benchmark_decide, methods=["POST"]),
+        Route("/api/nego/cycles/{cid}/co-plan", co_plan),
+        Route("/api/admin/nego/cycles/{cid}/co", co_apply, methods=["POST"]),
+        Route("/api/admin/nego/cycles/{cid}/on-fill", on_fill, methods=["POST"]),
+        Route("/api/nego/cycles/{cid}/package", package_checks),
+        Route("/api/admin/nego/cycles/{cid}/package.xlsx", package_xlsx),
+        Route("/api/admin/nego/cycles/{cid}/documents", cycle_documents),
+        Route("/api/admin/nego/cycles/{cid}/documents/{did:int}", cycle_document_get),
         Route("/api/admin/nego/notify/test", notify_test, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/links", link_create, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/links/{lid:int}/revoke", link_revoke, methods=["POST"]),

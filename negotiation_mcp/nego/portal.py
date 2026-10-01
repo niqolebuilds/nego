@@ -24,7 +24,8 @@ from . import model as M
 from . import store, template_io, uom
 
 PRINCIPAL_STEPS = tuple(M.PRINCIPAL_STEP_FIELDS)
-STEP_NUMBER = {"identification": 1, "current_mou": 2, "rfq": 3, "counter_offer": 4, "feedback1": 5, "online_nego": 6}
+STEP_NUMBER = {"identification": 1, "current_mou": 2, "rfq": 3, "counter_offer": 4, "feedback1": 5, "online_nego": 6,
+               "submission": 7}
 VIEW_FIELDS = ("id", "erp_code", "item_name", "brand", "catalog_no", "item_status", "remarks", "po_unit_text",
                "mou_qty", "mou_hna", "mou_disc", "rfq_qty", "rfq_hna", "rfq_disc", "price_reason", "principal_confirmed")
 FB1_FIELDS = ("co_disc", "fb1_disc")
@@ -194,6 +195,13 @@ def fill_from_reference(cycle: dict, by: str, ids: list[int] | None = None) -> i
 
 def summary(cycle: dict) -> dict:
     step = open_step(cycle) or cycle["current_step"]
+    if step == "submission":
+        dv = documents_view(cycle)
+        left = [{"id": None, "erp_code": None, "item_name": t["id"], "issues": [{"code": "doc_missing", "level": "missing",
+                 "id": f"Unggah {t['id']}.", "en": f"Upload the {t['en']}."}]} for t in dv["types"] if t["key"] in dv["missing_required"]]
+        return {"step": step, "items": 0, "discontinued": 0, "done": len(dv["documents"]), "missing": len(left), "to_check": 0,
+                "outstanding": left, "outstanding_count": len(left), "increases": [], "increase_count": 0,
+                "documents": len(dv["documents"]), "can_send": not left}
     p, th = ppn(), thresholds()
     rows = [view_item(i, step, p, th) for i in store.items(cycle["id"])]
     left = [{"id": r["id"], "erp_code": r["erp_code"], "item_name": r["item_name"],
@@ -213,14 +221,49 @@ def summary(cycle: dict) -> dict:
     }
 
 
+def documents_view(cycle: dict) -> dict:
+    from . import vault
+
+    docs = store.documents(cycle["id"])
+    have = {d["doc_type"] for d in docs}
+    return {"types": [{"key": k, "id": a, "en": b, "required": r, "uploaded": k in have} for k, a, b, r in vault.DOC_TYPES],
+            "documents": [{"id": d["id"], "doc_type": d["doc_type"], "filename": d["filename"], "size": d["size"],
+                           "uploaded_at": d["uploaded_at"]} for d in docs],
+            "missing_required": sorted(vault.REQUIRED - have)}
+
+
+def upload_document(cycle: dict, doc_type: str, filename: str, content: bytes, by: str) -> dict:
+    from . import vault
+
+    if open_step(cycle) != "submission":
+        raise EngineError("Dokumen dikirim di langkah terakhir. / Documents are sent at the last step.")
+    name, ctype = vault.check_upload(filename, content, doc_type)
+    stored, digest = vault.save(cycle["id"], content)
+    store.add_document(cycle["id"], {"doc_type": doc_type, "filename": name, "stored_name": stored, "content_type": ctype,
+                                     "size": len(content), "sha256": digest, "uploaded_by": by})
+    return documents_view(cycle)
+
+
+def delete_document(cycle: dict, did: int, by: str) -> dict:
+    from . import vault
+
+    if open_step(cycle) != "submission":
+        raise EngineError("Langkah ini sudah dikirim. / This step was already sent.")
+    d = store.delete_document(cycle["id"], did, by)
+    if not d:
+        raise EngineError("No such document")
+    vault.remove(cycle["id"], d["stored_name"])
+    return documents_view(cycle)
+
+
 def submit(cycle: dict, by: str) -> dict:
     step = open_step(cycle)
     if not step:
         raise EngineError("Langkah ini sudah dikirim. / This step was already sent.")
     s = summary(cycle)
     if not s["can_send"]:
-        raise EngineError(f"Masih ada {s['outstanding_count']} SKU yang perlu dilengkapi. / "
-                          f"{s['outstanding_count']} SKUs still need attention.")
+        raise EngineError(f"Masih ada {s['outstanding_count']} hal yang perlu dilengkapi. / "
+                          f"{s['outstanding_count']} things still need attention.")
     store.mark_submitted(cycle["id"], step, by, {"items": s["items"], "increases": s["increase_count"],
                                                  "discontinued": s["discontinued"]})
     from . import service

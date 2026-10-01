@@ -133,3 +133,12 @@ ul.left li { display: flex; justify-content: space-between; gap: 8px; align-item
   .tools .pbtn.ghost { flex: 1 1 auto; }
   .ref .pbtn { margin-left: 0; width: 100%; }
 }
+.doclist-p { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.docrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.docrow.need { border-left: 6px solid var(--sunset); }
+.docrow.have { border-left: 6px solid var(--spring); }
+.docrow .tag { margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.docrow .tag.req { color: #8a3d00; }
+.docrow label.pbtn { cursor: pointer; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.docrow > div { flex: 1; min-width: 0; }

@@ -97,5 +97,12 @@ def seed(by: str, today: date | None = None) -> dict:
             _, xlsx = service.export_xlsx(c["id"])
             service.import_template(c["id"], fill_rfq_like_a_principal(xlsx), f"principal:{name}", apply=True)
             service.set_step(c["id"], "counter_offer", by, "Sample: RFQ received")
+            if (SAMPLE / "inaproc_sample.csv").exists():
+                from . import benchmark
+
+                name, content = _file("inaproc_sample.csv")
+                benchmark.read_file(name, content, "INAPROC (sample)", True, service.ppn(), by)
+                benchmark.match_cycle(c["id"])
+                service.scan(c["id"])
         opened.append({"principal": name, "cycle_id": c["id"]})
     return {"principals": res, "opened": opened}

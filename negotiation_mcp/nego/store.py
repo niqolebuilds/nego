@@ -24,7 +24,7 @@ from ..settings import workspace
 from . import model as M
 
 ITEM_FIELDS = M.INPUT_FIELDS + ("po_unit_text", "base_unit", "po_qty_12m", "po_value_12m", "last_po_price", "source", "sort",
-                                 "price_reason", "principal_confirmed")
+                                 "price_reason", "principal_confirmed", "co_note")
 NUMERIC_FIELDS = {c.field for c in M.COLUMNS if c.kind in ("int", "money", "pct")} | {"po_qty_12m", "po_value_12m", "last_po_price"}
 PRINCIPAL_FIELDS = ("name", "distributor", "category", "binding", "mou_start", "mou_end",
                     "contact_name", "contact_email", "contact_phone", "notes")
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS cycles (
   contract_start TEXT NOT NULL, contract_end TEXT NOT NULL, binding TEXT NOT NULL DEFAULT 'Nett',
   delivery_fee TEXT NOT NULL DEFAULT 'Free for all Siloam Hospitals units',
   status TEXT NOT NULL DEFAULT 'open', current_step TEXT NOT NULL DEFAULT 'prepare',
-  step_due TEXT, prepared_at TEXT, prepare_summary TEXT, submitted_steps TEXT,
+  step_due TEXT, prepared_at TEXT, prepare_summary TEXT, submitted_steps TEXT, meeting_at TEXT, meeting_notes TEXT,
   created_at TEXT NOT NULL, created_by TEXT, updated_at TEXT, updated_by TEXT);
 CREATE TABLE IF NOT EXISTS cycle_items (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
@@ -52,11 +52,26 @@ CREATE TABLE IF NOT EXISTS cycle_items (
   rfq_qty REAL, rfq_hna REAL, rfq_disc REAL,
   co_disc REAL, fb1_disc REAL, on_disc REAL,
   po_unit_text TEXT, base_unit TEXT, po_qty_12m REAL, po_value_12m REAL, last_po_price REAL,
-  source TEXT, price_reason TEXT, principal_confirmed TEXT, updated_at TEXT, updated_by TEXT);
+  source TEXT, price_reason TEXT, principal_confirmed TEXT, co_note TEXT, updated_at TEXT, updated_by TEXT);
 CREATE TABLE IF NOT EXISTS principal_links (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
   token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL,
   expires_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT, last_used_at TEXT);
+CREATE TABLE IF NOT EXISTS benchmarks (
+  id INTEGER PRIMARY KEY, source TEXT NOT NULL, name TEXT NOT NULL, brand TEXT, catalog_no TEXT, unit_text TEXT,
+  pack_qty REAL, price REAL NOT NULL, incl_ppn INTEGER NOT NULL DEFAULT 1, price_pp REAL, price_date TEXT,
+  file TEXT, uploaded_at TEXT NOT NULL, uploaded_by TEXT);
+CREATE TABLE IF NOT EXISTS benchmark_matches (
+  id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES cycle_items(id) ON DELETE CASCADE,
+  benchmark_id INTEGER NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
+  confidence REAL NOT NULL, method TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'suggested',
+  decided_by TEXT, decided_at TEXT, UNIQUE (item_id, benchmark_id));
+CREATE TABLE IF NOT EXISTS cycle_documents (
+  id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE, doc_type TEXT NOT NULL,
+  filename TEXT NOT NULL, stored_name TEXT NOT NULL, content_type TEXT, size INTEGER, sha256 TEXT,
+  uploaded_at TEXT NOT NULL, uploaded_by TEXT NOT NULL, deleted_at TEXT);
+CREATE INDEX IF NOT EXISTS ix_bm_match ON benchmark_matches(cycle_id, status);
 CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY, cycle_id INTEGER REFERENCES cycles(id) ON DELETE CASCADE, event TEXT NOT NULL,
   channel TEXT NOT NULL DEFAULT 'webhook', recipient TEXT, payload TEXT NOT NULL,
@@ -112,6 +127,9 @@ MIGRATIONS = (
     ("cycle_items", "price_reason", "TEXT"),
     ("cycle_items", "principal_confirmed", "TEXT"),
     ("cycles", "submitted_steps", "TEXT"),
+    ("cycle_items", "co_note", "TEXT"),
+    ("cycles", "meeting_at", "TEXT"),
+    ("cycles", "meeting_notes", "TEXT"),
 )
 
 
@@ -349,6 +367,10 @@ def update_cycle(cid: int, data: dict, by: str) -> dict:
         allowed["delivery_fee"] = str(data["delivery_fee"] or "").strip()[:200]
     if "step_due" in data:
         allowed["step_due"] = _date(data["step_due"], "Due date")
+    if "meeting_at" in data:
+        allowed["meeting_at"] = (str(data["meeting_at"] or "").strip()[:20]) or None
+    if "meeting_notes" in data:
+        allowed["meeting_notes"] = (str(data["meeting_notes"] or "").strip()[:4000]) or None
     with connect() as con:
         c = get_cycle(cid, con)
         if not c:
@@ -695,3 +717,122 @@ def anomaly_counts(cid: int) -> dict:
         if r["status"] == "open" and r["severity"] == "high":
             out["open_high"] += r["n"]
     return out
+
+
+# ---------------------------------------------------------------- benchmarks
+
+def add_benchmarks(rows: list[dict], by: str) -> int:
+    with connect() as con:
+        con.executemany(
+            "INSERT INTO benchmarks (source, name, brand, catalog_no, unit_text, pack_qty, price, incl_ppn, price_pp, price_date, "
+            "file, uploaded_at, uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(r["source"], r["name"], r.get("brand"), r.get("catalog_no"), r.get("unit_text"), r.get("pack_qty"), r["price"],
+              int(bool(r.get("incl_ppn", True))), r.get("price_pp"), r.get("price_date"), r.get("file"), now(), by) for r in rows])
+    return len(rows)
+
+
+def benchmarks() -> list[dict]:
+    with connect() as con:
+        return [dict(r) for r in con.execute("SELECT * FROM benchmarks ORDER BY id")]
+
+
+def benchmark_sources() -> list[dict]:
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT source, file, COUNT(*) AS rows, MAX(uploaded_at) AS uploaded_at, MIN(price_date) AS date_from, "
+            "MAX(price_date) AS date_to FROM benchmarks GROUP BY source, file ORDER BY uploaded_at DESC")]
+
+
+def save_matches(cid: int, matches: list[dict]) -> dict:
+    """Store suggested matches; decided ones (confirmed/rejected) are never overwritten."""
+    added = 0
+    with connect() as con:
+        for m in matches:
+            cur = con.execute(
+                "INSERT INTO benchmark_matches (cycle_id, item_id, benchmark_id, confidence, method, status, decided_by, decided_at) "
+                "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(item_id, benchmark_id) DO UPDATE SET confidence=excluded.confidence, "
+                "method=excluded.method WHERE benchmark_matches.status = 'suggested'",
+                (cid, m["item_id"], m["benchmark_id"], m["confidence"], m["method"], m["status"],
+                 "auto" if m["status"] != "suggested" else None, now() if m["status"] != "suggested" else None))
+            added += cur.rowcount
+    return {"stored": added}
+
+
+def matches(cid: int, status: str | None = None) -> list[dict]:
+    q = ("SELECT m.*, i.erp_code, i.item_name, i.brand AS item_brand, i.catalog_no AS item_ref, b.source, b.name AS bm_name, "
+         "b.brand AS bm_brand, b.catalog_no AS bm_ref, b.unit_text AS bm_unit, b.price AS bm_price, b.price_pp, b.price_date "
+         "FROM benchmark_matches m JOIN cycle_items i ON i.id = m.item_id JOIN benchmarks b ON b.id = m.benchmark_id "
+         "WHERE m.cycle_id = ?")
+    args: list = [cid]
+    if status:
+        q += " AND m.status = ?"
+        args.append(status)
+    q += " ORDER BY i.sort, m.confidence DESC"
+    with connect() as con:
+        return [dict(r) for r in con.execute(q, args)]
+
+
+def decide_match(cid: int, mid: int, status: str, by: str) -> None:
+    if status not in ("confirmed", "rejected", "suggested"):
+        raise EngineError("Decision must be confirm or reject")
+    with connect() as con:
+        cur = con.execute("UPDATE benchmark_matches SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND cycle_id = ?",
+                          (status, by, now(), mid, cid))
+        if not cur.rowcount:
+            raise EngineError("No such match")
+
+
+def confirmed_pairs() -> set[tuple[str, str]]:
+    """(ERP code, benchmark key) pairs a person confirmed in any cycle: remembered next time."""
+    with connect() as con:
+        rows = con.execute(
+            "SELECT i.erp_code, b.source, b.name, b.catalog_no FROM benchmark_matches m JOIN cycle_items i ON i.id = m.item_id "
+            "JOIN benchmarks b ON b.id = m.benchmark_id WHERE m.status = 'confirmed' AND m.decided_by != 'auto'").fetchall()
+    return {(str(r["erp_code"] or "").upper(), f"{r['source']}|{r['name']}|{r['catalog_no'] or ''}".lower()) for r in rows}
+
+
+def best_benchmarks(cid: int) -> dict[int, dict]:
+    """Lowest confirmed benchmark per item (price per piece incl. PPN)."""
+    out: dict[int, dict] = {}
+    for m in matches(cid, "confirmed"):
+        if m["price_pp"] is None:
+            continue
+        cur = out.get(m["item_id"])
+        if cur is None or m["price_pp"] < cur["price_pp"]:
+            out[m["item_id"]] = {"price_pp": m["price_pp"], "source": m["source"], "name": m["bm_name"], "date": m["price_date"],
+                                 "match_id": m["id"]}
+    return out
+
+
+# ---------------------------------------------------------------- documents (principal submission)
+
+def add_document(cid: int, doc: dict) -> dict:
+    with connect() as con:
+        cur = con.execute(
+            "INSERT INTO cycle_documents (cycle_id, doc_type, filename, stored_name, content_type, size, sha256, uploaded_at, "
+            "uploaded_by) VALUES (?,?,?,?,?,?,?,?,?)",
+            (cid, doc["doc_type"], doc["filename"], doc["stored_name"], doc.get("content_type"), doc.get("size"),
+             doc.get("sha256"), now(), doc["uploaded_by"]))
+        _event(con, cid, doc["uploaded_by"], "document.upload", {"id": cur.lastrowid, "type": doc["doc_type"], "file": doc["filename"]})
+        return _d(con.execute("SELECT * FROM cycle_documents WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def documents(cid: int) -> list[dict]:
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT * FROM cycle_documents WHERE cycle_id = ? AND deleted_at IS NULL ORDER BY id", (cid,))]
+
+
+def get_document(cid: int, did: int) -> dict | None:
+    with connect() as con:
+        return _d(con.execute("SELECT * FROM cycle_documents WHERE cycle_id = ? AND id = ? AND deleted_at IS NULL",
+                              (cid, did)).fetchone())
+
+
+def delete_document(cid: int, did: int, by: str) -> dict | None:
+    with connect() as con:
+        d = _d(con.execute("SELECT * FROM cycle_documents WHERE cycle_id = ? AND id = ? AND deleted_at IS NULL", (cid, did)).fetchone())
+        if d:
+            con.execute("UPDATE cycle_documents SET deleted_at = ? WHERE id = ?", (now(), did))
+            _event(con, cid, by, "document.delete", {"id": did, "file": d["filename"]})
+        return d
