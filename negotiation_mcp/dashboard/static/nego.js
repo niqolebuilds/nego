@@ -108,6 +108,7 @@ function cycleCell(p) {
   const at = keys.indexOf(c.current_step);
   return el("div", { class: "cyc" },
     el("span", { class: `stage ${c.status === "closed" ? "s-agreed" : "s-negotiating"}`, text: c.step_label }),
+    c.submitted_steps && c.submitted_steps[c.current_step] ? el("span", { class: "sent-pill", text: "Principal sent ✓" }) : null,
     el("div", { class: "mini-steps", "aria-label": `Step ${at + 1} of ${keys.length}` },
       keys.slice(0, -1).map((k, i) => el("i", { class: i < at ? "done" : i === at ? "now" : "" }))),
     el("div", { class: "small muted", text: `${fmtDate(c.contract_start)} – ${fmtDate(c.contract_end)}` }));
@@ -255,6 +256,7 @@ function renderCycle() {
         el("p", { class: "muted", text: `Contract ${fmtDate(c.contract_start)} – ${fmtDate(c.contract_end)} · Binding ${c.binding === "Disc" ? "discount" : "nett price"} · PPN ${pct(ng.ov.ppn, 0)}` })),
       el("div", { class: "ng-tools" },
         el("a", { class: "act secondary", href: `/api/nego/cycles/${c.id}/export.xlsx`, text: "Download Template_Nego" }),
+        isAdmin() && c.status === "open" ? act("Principal link", () => linkPanel(c), "secondary") : null,
         isAdmin() ? act("Edit principal", () => principalForm(c.principal), "ghost") : null)),
     el("div", { id: "ng-steps" }),
     el("div", { class: "kpis5", id: "ng-kpis" }),
@@ -279,7 +281,11 @@ function renderHeaderParts() {
     el("p", { class: "small", text: STEP_DESC[c.current_step] }),
     nextKey ? act(`Move to ${steps[at + 1].label}`, () => moveStep(nextKey)) : null,
     at > 0 ? act("Back a step", () => moveStep(keys[at - 1]), "ghost") : null) : el("p", { class: "small muted step-actions", text: STEP_DESC[c.current_step] });
-  stepsBox.append(el("div", { class: "card stepcard" }, ol, move));
+  const sent = (c.submitted_steps || {})[c.current_step];
+  const turn = steps[at] && steps[at].who === "principal";
+  const banner = sent ? el("p", { class: "sent-banner", text: `The principal sent ${steps[at].label} on ${new Date(sent.at).toLocaleString("en-GB")}. Review the findings, then move to the next step.` })
+    : turn ? el("p", { class: "turn-banner", text: "It's the principal's turn. Share their link (Principal link) so they can fill this step online or in Excel." }) : null;
+  stepsBox.append(el("div", { class: "card stepcard" }, ol, banner, move));
 
   const latest = k.latest_impact;
   clear($("ng-kpis")).append(
@@ -443,6 +449,7 @@ async function openItem(id) {
       .map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: v }))));
   const findings = el("div", { class: "findings" });
   renderFindingList(findings, it.anomalies.filter((a) => a.status !== "cleared"), () => openItem(id), true);
+  const reason = it.price_reason ? el("p", { class: "reason-note" }, el("b", { text: "Principal's reason: " }), it.price_reason) : null;
 
   const form = el("form", { class: "progress-form item-form" });
   const inputs = {};
@@ -499,7 +506,7 @@ async function openItem(id) {
     el("p", { class: "eyebrow", text: it.erp_code || "No ERP code" }),
     el("h2", { id: "drawer-title", text: it.item_name || "Unnamed item" }),
     el("p", { class: "muted small", text: [it.brand, it.catalog_no, it.item_status].filter(Boolean).join(" · ") }),
-    prices, facts,
+    prices, facts, reason,
     el("h3", { text: "Findings" }), findings,
     el("h3", { text: isAdmin() ? "Edit" : "Values" }), form,
     el("h3", { text: "History" }), hist);
@@ -684,4 +691,37 @@ function renderActivity(body) {
     return el("li", {}, el("b", { text: EVENT_TEXT[e.action] || e.action }), extra ? ` · ${extra}` : "",
       el("div", { class: "small muted", text: `${e.user_email} · ${new Date(e.at).toLocaleString("en-GB")}` }));
   }))));
+}
+
+// ---------- principal link ----------
+async function linkPanel(c) {
+  const body = openPanel(el("p", { class: "eyebrow", text: "Principal link" }), el("h2", { id: "drawer-title", text: c.principal.name }));
+  const days = el("input", { type: "number", min: 1, max: 90, value: 14, id: "link-days" });
+  const out = el("div", { role: "status" });
+  const list = el("div");
+  const draw = (links) => {
+    clear(list).append(links.length ? el("ul", { class: "timeline" }, links.map((l) => el("li", {},
+      el("b", { text: l.revoked_at ? "Revoked" : l.expires_at < new Date().toISOString() ? "Expired" : "Active" }),
+      ` · created ${new Date(l.created_at).toLocaleString("en-GB")} by ${l.created_by}`,
+      el("div", { class: "small muted", text: `Valid until ${new Date(l.expires_at).toLocaleString("en-GB")}${l.last_used_at ? ` · last opened ${new Date(l.last_used_at).toLocaleString("en-GB")}` : " · not opened yet"}` }),
+      !l.revoked_at ? act("Revoke", async () => { try { draw((await send(`/api/admin/nego/cycles/${c.id}/links/${l.id}/revoke`, "POST", {})).links); } catch (e) { toast(e.message); } }, "ghost") : null))) :
+      el("p", { class: "muted small", text: "No links yet." }));
+  };
+  const create = act("Create link", async () => {
+    try {
+      const l = await send(`/api/admin/nego/cycles/${c.id}/links`, "POST", { days: +days.value || 14 });
+      const url = location.origin + l.path;
+      const field = el("input", { value: url, readonly: "", id: "link-url" });
+      clear(out).append(el("div", { class: "preview ok" },
+        el("p", { class: "small", text: "Copy this link now and send it to the principal by WhatsApp or email. It isn't shown again; create a new one if it's lost." }),
+        field, el("div", { class: "actions" }, act("Copy", async () => { field.select(); try { await navigator.clipboard.writeText(url); toast("Copied"); } catch (_) { document.execCommand("copy"); toast("Copied"); } }),
+          el("a", { class: "act secondary", href: `https://wa.me/?text=${encodeURIComponent(`Siloam Hospitals: silakan isi ${c.principal.name} di tautan berikut: ${url}`)}`, target: "_blank", rel: "noopener", text: "Share on WhatsApp" }))));
+      draw((await api(`/api/admin/nego/cycles/${c.id}/links`)).links);
+    } catch (e) { clear(out).append(el("p", { class: "error", text: e.message })); }
+  });
+  body.append(
+    el("p", { class: "muted", text: "The principal opens this link to fill their current step online or in Excel. They only see their own items and their own columns: no PO volumes, no Siloam findings, no other principals." }),
+    el("form", { class: "progress-form", onsubmit: (e) => e.preventDefault() }, field("Valid for (days)", days), el("div", { class: "actions" }, create)),
+    out, el("h3", { text: "Links" }), list);
+  try { draw((await api(`/api/admin/nego/cycles/${c.id}/links`)).links); } catch (e) { list.append(el("p", { class: "error", text: e.message })); }
 }

@@ -107,3 +107,14 @@ def latest_price(item: dict) -> tuple[str | None, float | None]:
         if p is not None:
             return step, p
     return None, None
+
+
+# What a principal may change at each of their steps. Everything else is read-only for them.
+# ``price_reason`` (why a price went up, or why the counter offer isn't accepted) is not a
+# template column; it travels in the extra "Alasan" column of the principal's workbook.
+PRINCIPAL_STEP_FIELDS: dict[str, tuple[str, ...]] = {
+    "identification": ("brand", "catalog_no", "item_status", "remarks"),
+    "rfq": ("item_status", "rfq_qty", "rfq_hna", "rfq_disc", "price_reason", "remarks"),
+    "feedback1": ("fb1_disc", "price_reason", "remarks"),
+}
+PCT_FIELDS = tuple(c.field for c in COLUMNS if c.kind == "pct")

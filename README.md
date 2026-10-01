@@ -351,9 +351,43 @@ Margin impact needs Siloam's selling price per item and isn't computed yet.
 - **Last cycle's template as the current MOU:** it's read with the agreed discount (ON, else FB1,
   CO, RFQ) as the MOU discount.
 
+**The principal's side (portal).** An admin clicks **Principal link** on a negotiation and sends
+the link by WhatsApp or email. The principal needs no account. The link opens only that
+principal's current step (Item Identification, RFQ or Feedback I), in Bahasa Indonesia with an
+English switch. Entry is built to avoid mistakes:
+- **Plain questions:** "HNA per BOX, sebelum PPN" and "Isi per BOX (pcs)" instead of the
+  template headers.
+- **Prefilled from the current MOU:** one click on **Sama dengan MOU** fills a SKU, and one
+  click fills every blank SKU.
+- **Inputs that can't be misread:** a discount field always reads as percent (15 means 15%), and
+  HNA shows thousands separators as you type.
+- **The price per piece incl. PPN appears instantly**, using the template formula, with the
+  change against the MOU.
+- **Checks run on the server on every save,** with the same code for the Excel upload:
+  - **Errors block sending:** a discount of 100% or more, HNA of 0, Qty not a whole number,
+    missing values.
+  - **Increases are allowed but need a reason.** Siloam's findings show it.
+  - **Unusual entries are confirmed once ("Ya, sudah benar"):** pack-size changes, prices off
+    by a pack multiple, big drops, very high discounts.
+- **Never loses work:** autosave per SKU, a progress bar, filters ("Belum diisi", "Perlu dicek",
+  "Harga naik"), and a one-SKU-at-a-time view on phones.
+- **Excel route:** a locked copy of Template_Nego where only the step's columns can be typed in,
+  with hints and stricter drop-downs in Bahasa, a check column and a reason column. Rows with
+  mistakes are listed and not saved.
+- **Sending:** **Kirim ke Siloam** shows a summary and stays disabled until nothing is left to
+  fix. The step then locks, Siloam sees "Principal sent ✓", and the findings are rescanned.
+
+What a principal can reach is enforced on the server (`nego/portal.py`):
+- one negotiation per link;
+- only the open step's fields;
+- responses that never include PO volumes or values, cost impact, Siloam's findings or other
+  principals.
+
+Links can be revoked, and only their SHA-256 hash is stored.
+
 **Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
-open and prepare negotiations, edit items, decide findings, import, and move steps. The principal
-portal (one step at a time, one-time-link sign-in, WhatsApp and email reminders) comes next.
+open and prepare negotiations, edit items, decide findings, import, and move steps. Automatic WhatsApp
+and email reminders come later; for now the admin shares the link.
 
 **Try it.** As an admin, open **Negotiations** and choose **Load sample principals**. That loads
 6 fictional principals and opens 3 negotiations. One of them already has an RFQ filled the way
@@ -390,9 +424,11 @@ negotiation_mcp/
   settings.py       admin-tunable engine settings, shared with the MCP server
   nlu.py            offline parser for the chat bar
   nego/             principal negotiation cycles: model (steps, template columns, formula), uom,
-                    store (nego.db), prepare, template_io, anomalies, impact, service, demo
+                    store (nego.db), prepare, template_io, anomalies, impact, service, demo,
+                    checks (principal-side checks, ID/EN), portal (links, allowlists, send)
   templates/        Template_Nego.xlsx (the exact workbook used for export)
-  dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, app.py; static/ shell, chat, nego, renewals, admin
+  dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, portal_routes.py, app.py;
+                    static/ shell, chat, nego, renewals, admin, principal (the portal)
 scripts/
   generate_sample_data.py   deterministic synthetic price book
   generate_nego_sample.py   fictional principals, PO export, formulary and MOU tracker
@@ -409,6 +445,7 @@ tests/
   test_warehouse.py     warehouse parity with the kernel
   test_dashboard.py     API parity, JSON safety, read-only
   test_nego.py          UOM, template formula, anomaly rules, prepare, Template_Nego round trip, roles
+  test_portal.py        principal checks, field/response allowlists, links, sending, locked Excel
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```

@@ -23,7 +23,8 @@ from ..engine import EngineError
 from ..settings import workspace
 from . import model as M
 
-ITEM_FIELDS = M.INPUT_FIELDS + ("po_unit_text", "base_unit", "po_qty_12m", "po_value_12m", "last_po_price", "source", "sort")
+ITEM_FIELDS = M.INPUT_FIELDS + ("po_unit_text", "base_unit", "po_qty_12m", "po_value_12m", "last_po_price", "source", "sort",
+                                 "price_reason", "principal_confirmed")
 NUMERIC_FIELDS = {c.field for c in M.COLUMNS if c.kind in ("int", "money", "pct")} | {"po_qty_12m", "po_value_12m", "last_po_price"}
 PRINCIPAL_FIELDS = ("name", "distributor", "category", "binding", "mou_start", "mou_end",
                     "contact_name", "contact_email", "contact_phone", "notes")
@@ -41,7 +42,7 @@ CREATE TABLE IF NOT EXISTS cycles (
   contract_start TEXT NOT NULL, contract_end TEXT NOT NULL, binding TEXT NOT NULL DEFAULT 'Nett',
   delivery_fee TEXT NOT NULL DEFAULT 'Free for all Siloam Hospitals units',
   status TEXT NOT NULL DEFAULT 'open', current_step TEXT NOT NULL DEFAULT 'prepare',
-  step_due TEXT, prepared_at TEXT, prepare_summary TEXT,
+  step_due TEXT, prepared_at TEXT, prepare_summary TEXT, submitted_steps TEXT,
   created_at TEXT NOT NULL, created_by TEXT, updated_at TEXT, updated_by TEXT);
 CREATE TABLE IF NOT EXISTS cycle_items (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
@@ -51,7 +52,11 @@ CREATE TABLE IF NOT EXISTS cycle_items (
   rfq_qty REAL, rfq_hna REAL, rfq_disc REAL,
   co_disc REAL, fb1_disc REAL, on_disc REAL,
   po_unit_text TEXT, base_unit TEXT, po_qty_12m REAL, po_value_12m REAL, last_po_price REAL,
-  source TEXT, updated_at TEXT, updated_by TEXT);
+  source TEXT, price_reason TEXT, principal_confirmed TEXT, updated_at TEXT, updated_by TEXT);
+CREATE TABLE IF NOT EXISTS principal_links (
+  id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL,
+  expires_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT, last_used_at TEXT);
 CREATE TABLE IF NOT EXISTS item_changes (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL, item_id INTEGER NOT NULL, at TEXT NOT NULL,
   user_email TEXT NOT NULL, field TEXT NOT NULL, old TEXT, new TEXT, via TEXT);
@@ -97,9 +102,21 @@ def connect() -> Iterator[sqlite3.Connection]:
         con.close()
 
 
+# Columns added after the first release, created on existing databases by ``init``.
+MIGRATIONS = (
+    ("cycle_items", "price_reason", "TEXT"),
+    ("cycle_items", "principal_confirmed", "TEXT"),
+    ("cycles", "submitted_steps", "TEXT"),
+)
+
+
 def init() -> None:
     with connect() as con:
         con.executescript(SCHEMA)
+        for table, col, kind in MIGRATIONS:
+            have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+            if col not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {kind}")
 
 
 def _d(r: sqlite3.Row | None) -> dict | None:
@@ -151,7 +168,7 @@ def clean_value(field: str, value: Any) -> Any:
         if value in (None, ""):
             return None
         v = str(value).strip().lower()
-        if v.startswith("disc") or v in ("inactive", "non active", "nonaktif", "tidak aktif"):
+        if v.startswith("disc") or v.startswith("tidak") or v in ("inactive", "non active", "nonaktif"):
             return "Discontinue"
         if v.startswith("act") or v in ("aktif", "ya", "yes"):
             return "Active"
@@ -261,6 +278,7 @@ def list_principals() -> list[dict]:
             c["items"] = counts.get(c["id"], {}).get("items", 0)
             c["open_anomalies"] = open_anoms.get(c["id"], 0)
             c["step_label"] = M.STEP_LABEL.get(c["current_step"], c["current_step"])
+            c["submitted_steps"] = json.loads(c["submitted_steps"]) if c.get("submitted_steps") else {}
         p["cycle"] = c
     return rows
 
@@ -300,6 +318,7 @@ def get_cycle(cid: int, con: sqlite3.Connection | None = None) -> dict | None:
     if c:
         c["principal"] = get_principal(c["principal_id"], con)
         c["prepare_summary"] = json.loads(c["prepare_summary"]) if c.get("prepare_summary") else None
+        c["submitted_steps"] = json.loads(c["submitted_steps"]) if c.get("submitted_steps") else {}
     return c
 
 
@@ -348,10 +367,60 @@ def set_step(cid: int, step: str, by: str, note: str = "") -> dict:
         if not c:
             raise EngineError("No such negotiation")
         status = "closed" if step == "closed" else "open"
-        con.execute("UPDATE cycles SET current_step = ?, status = ?, step_due = NULL, updated_at = ?, updated_by = ? WHERE id = ?",
-                    (step, status, now(), by, cid))
+        submitted = dict(c["submitted_steps"])
+        submitted.pop(step, None)  # moving (back) to a step opens it again for the principal
+        con.execute("UPDATE cycles SET current_step = ?, status = ?, step_due = NULL, submitted_steps = ?, updated_at = ?, "
+                    "updated_by = ? WHERE id = ?", (step, status, json.dumps(submitted), now(), by, cid))
         _event(con, cid, by, "step.set", {"from": c["current_step"], "to": step, "note": note[:300] or None})
         return get_cycle(cid, con)
+
+
+def mark_submitted(cid: int, step: str, by: str, summary: dict) -> dict:
+    with connect() as con:
+        c = get_cycle(cid, con)
+        submitted = dict(c["submitted_steps"])
+        submitted[step] = {"at": now(), "by": by}
+        con.execute("UPDATE cycles SET submitted_steps = ?, updated_at = ?, updated_by = ? WHERE id = ?",
+                    (json.dumps(submitted), now(), by, cid))
+        _event(con, cid, by, "principal.submit", {"step": step, **summary})
+        return get_cycle(cid, con)
+
+
+# ---------------------------------------------------------------- principal links
+
+def add_link(cid: int, token_hash: str, expires_at: str, by: str) -> dict:
+    with connect() as con:
+        cur = con.execute("INSERT INTO principal_links (cycle_id, token_hash, created_at, created_by, expires_at) VALUES (?,?,?,?,?)",
+                          (cid, token_hash, now(), by, expires_at))
+        _event(con, cid, by, "link.create", {"id": cur.lastrowid, "expires_at": expires_at})
+        return _d(con.execute("SELECT id, cycle_id, created_at, created_by, expires_at, revoked_at, last_used_at "
+                              "FROM principal_links WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def link_by_hash(token_hash: str) -> dict | None:
+    with connect() as con:
+        return _d(con.execute("SELECT * FROM principal_links WHERE token_hash = ?", (token_hash,)).fetchone())
+
+
+def touch_link(lid: int) -> None:
+    with connect() as con:
+        con.execute("UPDATE principal_links SET last_used_at = ? WHERE id = ?", (now(), lid))
+
+
+def links(cid: int) -> list[dict]:
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT id, created_at, created_by, expires_at, revoked_at, revoked_by, last_used_at FROM principal_links "
+            "WHERE cycle_id = ? ORDER BY id DESC", (cid,))]
+
+
+def revoke_link(cid: int, lid: int, by: str) -> None:
+    with connect() as con:
+        cur = con.execute("UPDATE principal_links SET revoked_at = ?, revoked_by = ? WHERE id = ? AND cycle_id = ? "
+                          "AND revoked_at IS NULL", (now(), by, lid, cid))
+        if not cur.rowcount:
+            raise EngineError("No such active link")
+        _event(con, cid, by, "link.revoke", {"id": lid})
 
 
 def mark_prepared(cid: int, summary: dict, by: str) -> None:

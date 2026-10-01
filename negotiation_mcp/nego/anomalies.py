@@ -136,6 +136,8 @@ def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, t
                 msg += f" A discount of {hold:.2%} on the new HNA (quoted {quoted * 100:g}%) keeps the MOU net price."
                 extra = {"field": admin_disc, "suggestion": round(hold, 6),
                          "suggestion_text": f"Set {M.BY_FIELD[admin_disc].header} to {hold:.2%}"}
+            if raw.get("price_reason"):
+                msg += f" Principal's reason: {raw['price_reason']}"
             add(raw, "price_increase", "medium", msg, detail={"stage": stage, "change": latest / mou - 1}, **extra)
 
         # list problems

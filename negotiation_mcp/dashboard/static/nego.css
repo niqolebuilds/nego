@@ -133,3 +133,9 @@ table.items td.flags { display: flex; gap: 4px; align-items: center; }
 .finding .keep input:not([type=checkbox]):not([type=radio]):not([type=file]) { flex: 1 1 220px; width: auto; }
 .cyc .stage { align-self: flex-start; }
 .nego-page a.act { text-decoration: none; display: inline-flex; align-items: center; }
+.sent-banner, .turn-banner { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 13.5px; }
+.sent-banner { background: var(--positive-bg); color: var(--positive-ink); font-weight: 600; }
+.turn-banner { background: var(--surface-breeze); color: var(--text-secondary); }
+.sent-pill { align-self: flex-start; background: var(--positive-bg); color: var(--positive-ink); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; }
+.reason-note { background: var(--surface-breeze); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+#link-url { width: 100%; box-sizing: border-box; min-width: 0; font-family: ui-monospace, monospace; font-size: 12.5px; }

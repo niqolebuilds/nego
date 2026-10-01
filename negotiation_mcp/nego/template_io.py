@@ -66,7 +66,11 @@ def _extend_ranges(ws, last: int) -> None:
     ws.conditional_formatting = new
 
 
-def export_cycle(cycle: dict, items: list[dict], ppn: float = M.DEFAULT_PPN) -> bytes:
+def export_cycle(cycle: dict, items: list[dict], ppn: float = M.DEFAULT_PPN, principal_step: str | None = None,
+                 increase_tolerance: float = 0.005) -> bytes:
+    """Fill Template_Nego. With ``principal_step`` the copy is for the principal: only that
+    step's columns can be typed in, entries are validated with hints in Bahasa, and a check
+    column plus a reason column are added (see ``_principal_mode``)."""
     import openpyxl
 
     if not TEMPLATE.exists():
@@ -100,9 +104,72 @@ def export_cycle(cycle: dict, items: list[dict], ppn: float = M.DEFAULT_PPN) -> 
                 continue
             v = it.get(c.field)
             ws[f"{c.letter}{r}"] = v if v not in ("",) else None
+    if principal_step:
+        _principal_mode(ws, items, principal_step, last, increase_tolerance)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+DV_HINTS = {
+    "C": ("Brand", "Nama brand / pabrikan.", None),
+    "D": ("Katalog (REF)", "Nomor katalog / REF dari pabrikan.", None),
+    "E": ("Status", "Pilih Active (masih dijual) atau Discontinue (tidak dijual lagi).", "Pilih dari daftar: Active atau Discontinue."),
+    "F": ("Keterangan", "Opsional.", None),
+    "K": ("Isi per kemasan", "Jumlah pcs dalam 1 kemasan PO. Contoh: BOX isi 50 → ketik 50.", "Isi dengan bilangan bulat, minimal 1."),
+    "L": ("HNA per kemasan", "Harga HNA untuk 1 kemasan PO, sebelum PPN. Contoh: 1250000.", "HNA harus angka lebih dari 0."),
+    "M": ("Diskon", "Diskon dalam persen. Ketik 15% (bukan 15).", "Diskon harus antara 0% dan 99%. Ketik 15% untuk lima belas persen."),
+    "O": ("Diskon", "Diskon dalam persen. Ketik 15%.", "Diskon harus antara 0% dan 99%."),
+}
+STRICT_DISC = {"M", "O", "Q", "S"}
+
+
+def _principal_mode(ws, items: list[dict], step: str, last: int, tol: float) -> None:
+    from openpyxl.formatting.rule import FormulaRule
+    from openpyxl.styles import Alignment, Font, PatternFill, Protection
+
+    editable = {M.BY_FIELD[f].letter for f in M.PRINCIPAL_STEP_FIELDS[step] if f in M.BY_FIELD}
+    for r in range(FIRST_ROW, last + 1):
+        for col in LETTERS:
+            ws[f"{col}{r}"].protection = Protection(locked=col not in editable)
+    for dv in ws.data_validations.dataValidation:
+        first = str(dv.sqref).split()[0][0]
+        title, prompt, error = DV_HINTS.get(first, DV_HINTS["O"] if first in STRICT_DISC else (None, None, None))
+        if first in STRICT_DISC:
+            dv.type, dv.operator, dv.formula1, dv.formula2 = "decimal", "between", "0", "0.99"
+        if title:
+            dv.promptTitle, dv.prompt, dv.showInputMessage = title, prompt, True
+        if error:
+            dv.errorTitle, dv.error, dv.showErrorMessage, dv.errorStyle = "Periksa isian", error, True, "stop"
+
+    if step in ("rfq", "feedback1"):
+        head = PatternFill("solid", fgColor="1F3864")
+        ws["U6"], ws["U7"] = "CEK OTOMATIS", ("Perubahan harga/pcs vs MOU" if step == "rfq" else "Perubahan vs Counter Offer")
+        ws["V7"] = "Alasan (wajib jika harga naik)" if step == "rfq" else "Alasan (jika diskon di bawah Counter Offer)"
+        ws.merge_cells("U6:V6")
+        for cell in ("U6", "U7", "V7"):
+            ws[cell]._style = copy(ws["F7"]._style)
+        ws["U6"].fill, ws["U6"].font = head, Font(bold=True, color="FFFFFF")
+        ws["U6"].alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions["U"].width, ws.column_dimensions["V"].width = 16, 34
+        num_fmt = "+0.0%;-0.0%;0.0%"
+        for r in range(FIRST_ROW, last + 1):
+            f = (f'=IFERROR(IF(OR(N{r}="",J{r}=""),"",N{r}/J{r}-1),"")' if step == "rfq"
+                 else f'=IFERROR(IF(OR(R{r}="",P{r}=""),"",R{r}/P{r}-1),"")')
+            ws[f"U{r}"] = f
+            ws[f"U{r}"]._style = copy(ws[f"J{r}"]._style)
+            ws[f"U{r}"].number_format = num_fmt
+            ws[f"V{r}"]._style = copy(ws[f"F{r}"]._style)
+            ws[f"V{r}"].protection = Protection(locked=False)
+        for i, it in enumerate(items):
+            ws[f"V{FIRST_ROW + i}"] = it.get("price_reason")
+        need = PatternFill("solid", fgColor="FFC7A6")
+        cond = (f'AND($U{FIRST_ROW}<>"",$U{FIRST_ROW}>{tol},$V{FIRST_ROW}="")' if step == "rfq"
+                else f'AND($Q{FIRST_ROW}<>"",$Q{FIRST_ROW}<$O{FIRST_ROW},$V{FIRST_ROW}="")')
+        ws.conditional_formatting.add(f"V{FIRST_ROW}:V{last}", FormulaRule(formula=[cond], fill=need))
+    ws.protection.sheet = True
+    ws.protection.formatColumns = False  # widths can still be changed
+    ws.protection.autoFilter = False
 
 
 def _norm(h: Any) -> str:
@@ -110,6 +177,7 @@ def _norm(h: Any) -> str:
 
 
 HEADER_INDEX = {_norm(c.header): c for c in M.COLUMNS}
+REASON_COLUMN = M.Column("V", "price_reason", "Alasan", "extra", "text", "principal")
 
 
 def read_template(content: bytes) -> dict:
@@ -130,7 +198,8 @@ def read_template(content: bytes) -> dict:
         raise EngineError("This doesn't look like Template_Nego: no 'ERP Code' header in the first 20 rows")
     cols: dict[int, M.Column] = {}
     for c in range(1, ws.max_column + 1):
-        col = HEADER_INDEX.get(_norm(ws.cell(hdr_row, c).value))
+        h = _norm(ws.cell(hdr_row, c).value)
+        col = REASON_COLUMN if h.startswith("alasan") else HEADER_INDEX.get(h)
         if col and col.kind != "formula":
             cols[c] = col
     if not any(col.field == "item_name" for col in cols.values()):
@@ -193,8 +262,9 @@ def plan_import(cycle_items: list[dict], parsed: dict, fields: tuple[str, ...]) 
             if f not in row or row[f] is None:
                 continue
             if _differs(item.get(f), row[f]):
+                header = M.BY_FIELD[f].header if f in M.BY_FIELD else REASON_COLUMN.header
                 changes.append({"item_id": item["id"], "erp_code": item.get("erp_code"), "item_name": item.get("item_name"),
-                                "field": f, "header": M.BY_FIELD[f].header, "old": item.get(f), "new": row[f]})
+                                "field": f, "header": header, "old": item.get(f), "new": row[f], "row": row["_row"]})
     counts: dict[str, int] = {}
     for c in changes:
         counts[c["header"]] = counts.get(c["header"], 0) + 1

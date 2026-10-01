@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from .. import appdb
 from ..engine import EngineError
-from ..nego import demo, service, store
+from ..nego import demo, portal, service, store
 from .admin import _form_file
 from .app import fail, ok
 
@@ -217,6 +217,32 @@ async def anomaly_decide(request: Request) -> Response:
                              str(body.get("reason", "")), _who(request)))
 
 
+@handler
+async def link_create(request: Request) -> Response:
+    cid = _cid(request)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    link = portal.create_link(cid, _who(request), (body or {}).get("days"))
+    appdb.audit(_who(request), "principal.link", {"cycle": cid, "link": link["id"]})
+    return ok(link)
+
+
+@handler
+async def link_list(request: Request) -> Response:
+    cid = _cid(request)
+    store.require_cycle(cid)
+    return ok({"links": store.links(cid)})
+
+
+@handler
+async def link_revoke(request: Request) -> Response:
+    cid = _cid(request)
+    store.revoke_link(cid, int(request.path_params["lid"]), _who(request))
+    return ok({"links": store.links(cid)})
+
+
 def routes() -> list[Route]:
     return [
         Route("/api/nego/principals", principals),
@@ -238,4 +264,7 @@ def routes() -> list[Route]:
         Route("/api/admin/nego/cycles/{cid}/step", cycle_step, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/items/{iid:int}", item_update, methods=["PATCH"]),
         Route("/api/admin/nego/cycles/{cid}/anomalies/{aid:int}", anomaly_decide, methods=["POST"]),
+        Route("/api/admin/nego/cycles/{cid}/links", link_list),
+        Route("/api/admin/nego/cycles/{cid}/links", link_create, methods=["POST"]),
+        Route("/api/admin/nego/cycles/{cid}/links/{lid:int}/revoke", link_revoke, methods=["POST"]),
     ]

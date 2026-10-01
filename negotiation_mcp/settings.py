@@ -70,6 +70,9 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("anomaly_outlier_z", "Outlier strictness for largest/smallest changes (robust z)", "Principal negotiations", 3.5, "number", 1, 10,
             "Lower flags more items. 3.5 is the usual robust cut-off."),
     Setting("anomaly_review_top_n", "Always review this many largest increases and decreases", "Principal negotiations", 3, "int", 0, 50),
+    Setting("check_drop", "Ask the principal to confirm a price drop larger than", "Principal negotiations", 0.40, "fraction", 0.05, 1),
+    Setting("check_high_disc", "Ask the principal to confirm a discount above", "Principal negotiations", 0.60, "fraction", 0.05, 0.99),
+    Setting("principal_link_days", "Principal link stays valid for (days)", "Principal negotiations", 14, "int", 1, 90),
     Setting("llm_fallback", "Send questions the built-in parser can't understand to Claude", "Assistant", False, "bool",
             help="Needs ANTHROPIC_API_KEY on the server. Question text and engine results would be sent to Anthropic."),
 )

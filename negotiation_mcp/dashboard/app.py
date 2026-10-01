@@ -411,7 +411,7 @@ async def me(request: Request) -> Response:
 
 def create_app(breakage: float | None = None) -> Starlette:
     from ..nego import store as nego_store
-    from . import admin, nego_routes
+    from . import admin, nego_routes, portal_routes
 
     STATE["breakage"] = breakage
     appdb.init()
@@ -448,6 +448,7 @@ def create_app(breakage: float | None = None) -> Starlette:
             Route("/api/brief", api_brief),
             *admin.routes(),
             *nego_routes.routes(),
+            *portal_routes.routes(),
             Mount("/static", StaticFiles(directory=STATIC), name="static"),
         ],
     )
