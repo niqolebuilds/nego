@@ -1,11 +1,11 @@
 "use strict";
 // App shell: who is signed in, which page shows, the header. Pages: welcome, signin,
-// chat, renewals, admin. Pages behind sign-in redirect there; the server enforces the
+// chat, nego (principal negotiations), renewals, admin. Pages behind sign-in redirect there; the server enforces the
 // same rules on every API call, so hiding a tab is convenience, not security.
 
 const shell = { user: null, catalog: null, intended: null, provider: null };
-const PAGES = ["welcome", "signin", "chat", "renewals", "admin"];
-const NEEDS_AUTH = new Set(["chat", "renewals", "admin"]);
+const PAGES = ["welcome", "signin", "chat", "nego", "renewals", "admin"];
+const NEEDS_AUTH = new Set(["chat", "nego", "renewals", "admin"]);
 
 function toast(text) {
   const t = $("toast");
@@ -58,6 +58,7 @@ async function route() {
   hideTip();
   if (page === "signin") setTimeout(() => $("signin-email").focus(), 30);
   if (page === "chat") chatEnter(rest);
+  if (page === "nego") ngEnter(rest);
   if (page === "renewals") boardEnter(rest);
   if (page === "admin") adminEnter(rest[0] || "data");
   if (page !== "chat") window.scrollTo(0, 0);

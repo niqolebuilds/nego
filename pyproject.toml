@@ -11,3 +11,6 @@ negotiation-mcp = "negotiation_mcp.server:main"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+negotiation_mcp = ["templates/*.xlsx", "dashboard/static/*"]

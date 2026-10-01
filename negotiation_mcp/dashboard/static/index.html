@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/chat.css">
 <link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/nego.css">
 </head>
 <body class="app">
 <header class="bar">
@@ -17,6 +18,7 @@
   </a>
   <nav class="apptabs" id="apptabs" aria-label="Sections" hidden>
     <a href="#chat" data-page="chat">Assistant</a>
+    <a href="#nego" data-page="nego">Negotiations</a>
     <a href="#renewals" data-page="renewals">Renewals</a>
     <a href="#admin" data-page="admin" id="admin-tab" hidden>Admin</a>
   </nav>
@@ -64,6 +66,7 @@
   <section class="notes" aria-labelledby="notes-title">
     <h2 id="notes-title">Good to know</h2>
     <ul>
+      <li><b>Negotiate one principal at a time.</b> Negotiations follows Template_Nego step by step: build the item list from POs, the formulary and the MOU, read the principal's RFQ back, and let the engine flag typing slips, unit mix-ups and price increases before anything is agreed.</li>
       <li><b>Everyone can see everything and update renewal progress.</b> Admins also upload price lists, records and documents, and tune the engine.</li>
       <li><b>Prices are per clinical unit</b> (one test, one piece, one vial) and also shown in the vendor's pack, so a box of 50 is never compared with a single.</li>
       <li><b>The walk-away price is only a proposal.</b> It needs sign-off from someone other than the negotiator before the engine will say accept, push or walk.</li>
@@ -111,6 +114,9 @@
     </form>
   </div>
 </main>
+
+<!-- Principal negotiations: list and one cycle's workspace (nego.js) -->
+<main id="nego" class="nego-page page-v" hidden></main>
 
 <!-- Renewals board -->
 <main id="renewals" class="board-page page-v" hidden>
@@ -169,6 +175,7 @@
 <script src="/static/renewals.js"></script>
 <script src="/static/admin.js"></script>
 <script src="/static/chat.js"></script>
+<script src="/static/nego.js"></script>
 <script src="/static/shell.js"></script>
 </body>
 </html>

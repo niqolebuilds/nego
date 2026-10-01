@@ -90,6 +90,9 @@ Add to `claude_desktop_config.json`:
 | `negotiation_savings_opportunities` | — | Where to negotiate first. |
 | `negotiation_alerts` | — | Price creep, overpaying sites, expensive quotes, renewals, rebates at risk. |
 | `negotiation_vendor_spend` | — | Share of wallet and growth. |
+| `negotiation_principals` | Nego Standarisasi (6-month alert) | Principals, MOU end dates, where each negotiation is. |
+| `negotiation_cycle_summary` | Cost impact in Excel | One principal negotiation: step, RFQ coverage, cost impact per step. |
+| `negotiation_cycle_findings` | Hunting for largest/smallest anomalies | The anomaly queue, with the discount that holds the MOU price. |
 
 Every tool is read-only, idempotent and closed-world: no external API and no writes.
 The calculation tools take their data as parameters. The price-intelligence tools
@@ -300,6 +303,66 @@ dashboards and Claude always agree. `deploy/docker-compose.yml` runs the warehou
 build, the built-in dashboard and the official Metabase image together. Connection
 steps for Metabase and Superset are in `deploy/SUPERSET.md`.
 
+## Principal negotiations (Template_Nego)
+
+Siloam negotiates **one principal at a time, with all of its items**. The app follows the
+six sections of `Template_Nego.xlsx`, plus a Prepare step before them and a Submission step after:
+
+| Step | Who | What happens |
+|---|---|---|
+| Prepare | Siloam | The item list is built from 12 months of POs (PowerBI export), the formulary (items not bought are added) and the current MOU, then sorted A–Z. |
+| 1. Item Identification | Principal | Brand, catalogue no. (REF), Active/Discontinue, remarks. |
+| 2. Current MOU | Reference | MOU Qty/PO unit, HNA, discount and unit price incl. PPN. |
+| 3. RFQ | Principal | Qty/PO unit, HNA, discount. |
+| 4. Counter Offer | Siloam | A CO discount per item. The engine proposes the discount that holds the MOU price. |
+| 5. Feedback I | Principal | Accept, or a Feedback I discount. |
+| 6. Online Nego | Siloam | The agreed discount. |
+| Submission | Principal | Documents for the BAK. The app stops at document submission. |
+
+Every unit price uses the template formula, `HNA / Qty × (1 − Disc) × (1 + PPN)`. Counter offer,
+Feedback I and Online Nego price the RFQ HNA and Qty with their own discount, as columns P, R and T
+do. PPN is an admin setting (11% by default).
+
+**Engine checks (the anomaly queue).** Each finding has a severity, a plain message and, where
+the fix is obvious, a one-click fix. An admin decides to fix it or keep it as is; keeping it needs a
+reason, which is logged. Decisions survive rescans. The checks:
+- **Typing slips:** a discount typed as 15 instead of 15%, a discount of 100% or more, HNA without
+  a Qty, an HNA of 0.
+- **Units:** the pack size changed between the MOU and the RFQ; the PO unit text (`BOX@50`,
+  `BX 10 VIAL`, `1 BOX = 100 PCS`…) disagrees with the pack; a price off by a pack multiple
+  (≈10×, 50×, 100×).
+- **Rule 1, no increase if avoidable:** every increase over the MOU per piece, with the
+  conversion discount that keeps the MOU net price.
+- **Rule 2, always check the largest and smallest changes:** robust outliers (median/MAD) plus
+  the top N each way.
+- **List problems:** duplicate ERP codes, discontinued items with a price, and active items with
+  no RFQ price once the RFQ is back.
+- **PO price vs MOU:** Siloam's last PO price far from the MOU (invoice compliance or a unit
+  mix-up).
+
+**Cost impact** is (step price − MOU price) × pieces a year from the POs, per item and per step.
+Margin impact needs Siloam's selling price per item and isn't computed yet.
+
+**Template_Nego in and out.**
+- **Export:** the real workbook, filled in, with the title block, legend, colours, drop-downs,
+  highlight rules and formulas kept. It grows past 150 rows when needed.
+- **Import:** reads a filled copy back by its headers. You see every change before applying it.
+  Blank cells never erase a value, and a file for another principal is refused.
+- **Last cycle's template as the current MOU:** it's read with the agreed discount (ON, else FB1,
+  CO, RFQ) as the MOU discount.
+
+**Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
+open and prepare negotiations, edit items, decide findings, import, and move steps. The principal
+portal (one step at a time, one-time-link sign-in, WhatsApp and email reminders) comes next.
+
+**Try it.** As an admin, open **Negotiations** and choose **Load sample principals**. That loads
+6 fictional principals and opens 3 negotiations. One of them already has an RFQ filled the way
+principals do, typical mistakes included. Sample files are in `data/nego_sample/`
+(`python scripts/generate_nego_sample.py`).
+
+The data is kept in its own SQLite file (`nego.db` in the workspace), separate from `app.db`, so
+the confidential commercial data can be backed up and encrypted on its own.
+
 ## Tests
 
 ```bash
@@ -326,9 +389,13 @@ negotiation_mcp/
   datastore.py      admin uploads: validate, preview, versioned apply, rollback
   settings.py       admin-tunable engine settings, shared with the MCP server
   nlu.py            offline parser for the chat bar
-  dashboard/        Starlette app: auth.py, admin.py, app.py; static/ shell, chat, renewals, admin
+  nego/             principal negotiation cycles: model (steps, template columns, formula), uom,
+                    store (nego.db), prepare, template_io, anomalies, impact, service, demo
+  templates/        Template_Nego.xlsx (the exact workbook used for export)
+  dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, app.py; static/ shell, chat, nego, renewals, admin
 scripts/
   generate_sample_data.py   deterministic synthetic price book
+  generate_nego_sample.py   fictional principals, PO export, formulary and MOU tracker
   build_warehouse.py        builds data/warehouse.db
 data/
   sample/           synthetic price book (marked SAMPLE_DATA)
@@ -341,6 +408,7 @@ tests/
   test_intelligence.py  targets beat every reference; counter-offers recompute through ENUC
   test_warehouse.py     warehouse parity with the kernel
   test_dashboard.py     API parity, JSON safety, read-only
+  test_nego.py          UOM, template formula, anomaly rules, prepare, Template_Nego round trip, roles
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```
