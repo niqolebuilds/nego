@@ -90,6 +90,9 @@ Add to `claude_desktop_config.json`:
 | `negotiation_savings_opportunities` | — | Where to negotiate first. |
 | `negotiation_alerts` | — | Price creep, overpaying sites, expensive quotes, renewals, rebates at risk. |
 | `negotiation_vendor_spend` | — | Share of wallet and growth. |
+| `negotiation_principals` | Nego Standarisasi (6-month alert) | Principals, MOU end dates, where each negotiation is. |
+| `negotiation_cycle_summary` | Cost impact in Excel | One principal negotiation: step, RFQ coverage, cost impact per step. |
+| `negotiation_cycle_findings` | Hunting for largest/smallest anomalies | The anomaly queue, with the discount that holds the MOU price. |
 
 Every tool is read-only, idempotent and closed-world: no external API and no writes.
 The calculation tools take their data as parameters. The price-intelligence tools
@@ -300,6 +303,161 @@ dashboards and Claude always agree. `deploy/docker-compose.yml` runs the warehou
 build, the built-in dashboard and the official Metabase image together. Connection
 steps for Metabase and Superset are in `deploy/SUPERSET.md`.
 
+## Principal negotiations (Template_Nego)
+
+Siloam negotiates **one principal at a time, with all of its items**. The app follows the
+six sections of `Template_Nego.xlsx`, plus a Prepare step before them and a Submission step after:
+
+| Step | Who | What happens |
+|---|---|---|
+| Prepare | Siloam | The item list is built from 12 months of POs (PowerBI export), the formulary (items not bought are added) and the current MOU, then sorted A–Z. |
+| 1. Item Identification | Principal | Brand, catalogue no. (REF), Active/Discontinue, remarks. |
+| 2. Current MOU | Reference | MOU Qty/PO unit, HNA, discount and unit price incl. PPN. |
+| 3. RFQ | Principal | Qty/PO unit, HNA, discount. |
+| 4. Counter Offer | Siloam | A CO discount per item. The engine proposes the discount that holds the MOU price. |
+| 5. Feedback I | Principal | Accept, or a Feedback I discount. |
+| 6. Online Nego | Siloam | The agreed discount. |
+| Submission | Principal | Documents for the BAK. The app stops at document submission. |
+
+Every unit price uses the template formula, `HNA / Qty × (1 − Disc) × (1 + PPN)`. Counter offer,
+Feedback I and Online Nego price the RFQ HNA and Qty with their own discount, as columns P, R and T
+do. PPN is an admin setting (11% by default).
+
+**Engine checks (the anomaly queue).** Each finding has a severity, a plain message and, where
+the fix is obvious, a one-click fix. An admin decides to fix it or keep it as is; keeping it needs a
+reason, which is logged. Decisions survive rescans. The checks:
+- **Typing slips:** a discount typed as 15 instead of 15%, a discount of 100% or more, HNA without
+  a Qty, an HNA of 0.
+- **Units:** the pack size changed between the MOU and the RFQ; the PO unit text (`BOX@50`,
+  `BX 10 VIAL`, `1 BOX = 100 PCS`…) disagrees with the pack; a price off by a pack multiple
+  (≈10×, 50×, 100×).
+- **Rule 1, no increase if avoidable:** every increase over the MOU per piece, with the
+  conversion discount that keeps the MOU net price.
+- **Rule 2, always check the largest and smallest changes:** robust outliers (median/MAD) plus
+  the top N each way.
+- **List problems:** duplicate ERP codes, discontinued items with a price, and active items with
+  no RFQ price once the RFQ is back.
+- **PO price vs MOU:** Siloam's last PO price far from the MOU (invoice compliance or a unit
+  mix-up).
+
+**Cost impact** is (step price − MOU price) × pieces a year from the POs, per item and per step.
+Margin impact needs Siloam's selling price per item and isn't computed yet.
+
+**Template_Nego in and out.**
+- **Export:** the real workbook, filled in, with the title block, legend, colours, drop-downs,
+  highlight rules and formulas kept. It grows past 150 rows when needed.
+- **Import:** reads a filled copy back by its headers. You see every change before applying it.
+  Blank cells never erase a value, and a file for another principal is refused.
+- **Last cycle's template as the current MOU:** it's read with the agreed discount (ON, else FB1,
+  CO, RFQ) as the MOU discount.
+
+**The principal's side (portal).** An admin clicks **Principal link** on a negotiation and sends
+the link by WhatsApp or email. The principal needs no account. The link opens only that
+principal's current step (Item Identification, RFQ or Feedback I), in Bahasa Indonesia with an
+English switch. Entry is built to avoid mistakes:
+- **Plain questions:** "HNA per BOX, sebelum PPN" and "Isi per BOX (pcs)" instead of the
+  template headers.
+- **Prefilled from the current MOU:** one click on **Sama dengan MOU** fills a SKU, and one
+  click fills every blank SKU.
+- **Inputs that can't be misread:** a discount field always reads as percent (15 means 15%), and
+  HNA shows thousands separators as you type.
+- **The price per piece incl. PPN appears instantly**, using the template formula, with the
+  change against the MOU.
+- **Checks run on the server on every save,** with the same code for the Excel upload:
+  - **Errors block sending:** a discount of 100% or more, HNA of 0, Qty not a whole number,
+    missing values.
+  - **Increases are allowed but need a reason.** Siloam's findings show it.
+  - **Unusual entries are confirmed once ("Ya, sudah benar"):** pack-size changes, prices off
+    by a pack multiple, big drops, very high discounts.
+- **Never loses work:** autosave per SKU, a progress bar, filters ("Belum diisi", "Perlu dicek",
+  "Harga naik"), and a one-SKU-at-a-time view on phones.
+- **Excel route:** a locked copy of Template_Nego where only the step's columns can be typed in,
+  with hints and stricter drop-downs in Bahasa, a check column and a reason column. Rows with
+  mistakes are listed and not saved.
+- **Sending:** **Kirim ke Siloam** shows a summary and stays disabled until nothing is left to
+  fix. The step then locks, Siloam sees "Principal sent ✓", and the findings are rescanned.
+
+What a principal can reach is enforced on the server (`nego/portal.py`):
+- one negotiation per link;
+- only the open step's fields;
+- responses that never include PO volumes or values, cost impact, Siloam's findings or other
+  principals.
+
+Links can be revoked, and only their SHA-256 hash is stored.
+
+**After the RFQ: counter offer, benchmarks, Online Nego, submission (the Negotiate tab).**
+- **Counter offer:** one click proposes a CO discount per item. It brings the price per piece
+  down to the lowest credible reference: the MOU price (rule 1), Siloam's last PO price, or a
+  confirmed market benchmark.
+  - It never asks for less than the principal quoted.
+  - It asks for at most a set number of extra points (25 by default).
+  - Each item shows the reason.
+- **Market benchmarks:** import an INAPROC e-Katalog, SIMO Inhealth or other price-list export
+  (any headers, CSV or Excel).
+  - Prices become price per piece incl. PPN.
+  - Rows are matched to items by catalogue no., or by name and brand with size checks
+    (22G ≠ 24G).
+  - Strong matches are confirmed automatically, the rest wait for a person, and decisions are
+    remembered by ERP code.
+  - "Above market benchmark" joins Siloam's findings.
+  - Principals never see benchmarks.
+
+  The app imports files; it doesn't log in to those sites.
+- **Online Nego:** record the meeting, then fill the agreed discount from Feedback I (else the
+  counter offer) and edit what changed. If the agreed prices cost more than the MOU beyond the
+  escalation limit (Engine settings), the tab says escalation is needed.
+- **Submission package:** one Excel file with **Excel Confirmation**, **BAK Draft** (Nett or
+  Disc layout by binding) and **Checks**.
+  - It covers active items with an agreed price, A–Z, with no duplicate ERP codes.
+  - It's marked DRAFT while anything is missing.
+  - Siloam's own Confirmation and BAK templates can replace these layouts when they're provided.
+- **Company documents:** at the last step the principal uploads NIB and NPWP (required), plus
+  deeds, LoA and product registrations.
+  - Files are **encrypted at rest** (Fernet; key from `NEGO_DOC_KEY`, or a workspace key file
+    for pilots).
+  - Only admins can download them, and every download is logged.
+
+**Claude drafting (optional, off by default).** In the Negotiate tab, admins can ask Claude to
+draft three things:
+- the counter-offer cover message to the principal (Bahasa);
+- a tidy meeting summary from their own notes (Bahasa);
+- the escalation note for the approver (English).
+
+The engine still computes every number. Only counts, the admin's notes and escalation totals are
+sent, never the item price list. Each draft is shown for review and logged. It needs
+`ANTHROPIC_API_KEY` and the setting turned on.
+
+**Going live:** see `deploy/GO_LIVE.md`. The development sign-in has to be replaced with SSO or
+passwords first.
+
+**Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
+open and prepare negotiations, edit items, decide findings, import, and move steps. **Sending the link automatically.** When an admin moves a negotiation to a principal step, the
+app can send the principal a fresh link by email and WhatsApp.
+- **How:** it posts one event to a **Power Automate** flow. The flow sends the Outlook email and
+  a Meta-approved **WhatsApp Cloud API** template.
+- **Reliability:** messages go through an outbox with retries. Admins see each one's status and
+  can retry.
+- **Setup:** set `NEGO_PUBLIC_URL` and `NEGO_NOTIFY_WEBHOOK_URL` on the server. The step-by-step
+  guide, the JSON schema and the template text are in `deploy/POWER_AUTOMATE.md`.
+- **Without it:** an admin copies the link from **Principal link**.
+- **Deadline:** moving to a principal step sets a deadline (7 days by default).
+- **Reminders:** they go out 3 days and 1 day before, then daily while late, until the principal
+  sends. Each carries the same link.
+- **Notices to Siloam:** when a principal sends a step, Siloam's team gets an email
+  (`NEGO_NOTIFY_ADMINS`). Admins also get a weekly email listing MOUs that end within 6 months
+  with no negotiation open.
+- **Other WhatsApp providers:** an official partner of Meta (BSP) can replace Meta's API inside
+  the flow. Unofficial WhatsApp gateways (QR-linked numbers) aren't suitable: numbers get banned
+  and the links are confidential.
+
+**Try it.** As an admin, open **Negotiations** and choose **Load sample principals**. That loads
+6 fictional principals and opens 3 negotiations. One of them already has an RFQ filled the way
+principals do, typical mistakes included. Sample files are in `data/nego_sample/`
+(`python scripts/generate_nego_sample.py`).
+
+The data is kept in its own SQLite file (`nego.db` in the workspace), separate from `app.db`, so
+the confidential commercial data can be backed up and encrypted on its own.
+
 ## Tests
 
 ```bash
@@ -326,21 +484,35 @@ negotiation_mcp/
   datastore.py      admin uploads: validate, preview, versioned apply, rollback
   settings.py       admin-tunable engine settings, shared with the MCP server
   nlu.py            offline parser for the chat bar
-  dashboard/        Starlette app: auth.py, admin.py, app.py; static/ shell, chat, renewals, admin
+  nego/             principal negotiation cycles: model (steps, template columns, formula), uom,
+                    store (nego.db), prepare, template_io, anomalies, impact, service, demo,
+                    checks (principal-side checks, ID/EN), portal (links, allowlists, send),
+                    notify (outbox + webhook to Power Automate), negotiate (counter offer, Online Nego,
+                    escalation, BAK/Confirmation package), benchmark (import + matching), vault (encrypted documents),
+                    assist (optional Claude drafting)
+  templates/        Template_Nego.xlsx (the exact workbook used for export)
+  dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, portal_routes.py, app.py;
+                    static/ shell, chat, nego, renewals, admin, principal (the portal)
 scripts/
   generate_sample_data.py   deterministic synthetic price book
+  generate_nego_sample.py   fictional principals, PO export, formulary and MOU tracker
   build_warehouse.py        builds data/warehouse.db
 data/
   sample/           synthetic price book (marked SAMPLE_DATA)
   templates/        header-only CSVs describing the export
 deploy/
-  docker-compose.yml, SUPERSET.md
+  docker-compose.yml, SUPERSET.md, POWER_AUTOMATE.md, GO_LIVE.md
 tests/
   test_engine.py        33 tests including workbook parity
   test_pricebook.py     loading, validation, UoM, index
   test_intelligence.py  targets beat every reference; counter-offers recompute through ENUC
   test_warehouse.py     warehouse parity with the kernel
   test_dashboard.py     API parity, JSON safety, read-only
+  test_nego.py          UOM, template formula, anomaly rules, prepare, Template_Nego round trip, roles
+  test_portal.py        principal checks, field/response allowlists, links, sending, locked Excel
+  test_notify.py        automatic link sending through a stub webhook: payload, signature, retry, redaction
+  test_negotiate.py     counter-offer rules, benchmark matching, Online Nego, escalation, package, encrypted documents
+  test_assist.py        Claude drafting with a fake client: off by default, aggregates only, refusals; CSP; link limiter
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```

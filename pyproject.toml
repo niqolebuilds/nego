@@ -3,7 +3,7 @@ name = "negotiation-mcp"
 version = "0.1.0"
 description = "Negotiation decision engine for Siloam healthcare procurement, exposed as an MCP server"
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.2.0,<2", "pydantic>=2.0", "starlette", "uvicorn", "openpyxl>=3.1"]
+dependencies = ["mcp>=1.2.0,<2", "pydantic>=2.0", "starlette", "uvicorn", "openpyxl>=3.1", "cryptography>=41"]
 
 [project.scripts]
 negotiation-mcp = "negotiation_mcp.server:main"
@@ -11,3 +11,6 @@ negotiation-mcp = "negotiation_mcp.server:main"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+negotiation_mcp = ["templates/*.xlsx", "dashboard/static/*"]

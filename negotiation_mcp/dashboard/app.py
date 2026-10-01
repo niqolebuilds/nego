@@ -410,10 +410,15 @@ async def me(request: Request) -> Response:
 
 
 def create_app(breakage: float | None = None) -> Starlette:
-    from . import admin
+    from ..nego import store as nego_store
+    from . import admin, nego_routes, portal_routes
 
     STATE["breakage"] = breakage
     appdb.init()
+    nego_store.init()
+    from ..nego import notify
+
+    notify.start_sender()
     return Starlette(
         middleware=[Middleware(auth.AuthMiddleware)],
         routes=[
@@ -445,6 +450,8 @@ def create_app(breakage: float | None = None) -> Starlette:
             Route("/api/alerts", api_alerts),
             Route("/api/brief", api_brief),
             *admin.routes(),
+            *nego_routes.routes(),
+            *portal_routes.routes(),
             Mount("/static", StaticFiles(directory=STATIC), name="static"),
         ],
     )

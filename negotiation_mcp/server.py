@@ -45,7 +45,7 @@ from .formatting import (
     vendor_spend_markdown,
     verdict_markdown,
 )
-from .numfmt import num, pct, rp
+from .numfmt import num, pct, rp, rp_compact
 from .pricebook import SAMPLE_BANNER, PriceBook, cached_book
 
 mcp = FastMCP("negotiation_mcp")
@@ -1186,6 +1186,103 @@ async def negotiation_vendor_spend(params: VendorSpendInput) -> str:
         rows = I.vendor_spend(book, params.as_of)
         return _respond(params.response_format, vendor_spend_markdown(rows, book.is_sample, book.currency),
                         {"is_sample": book.is_sample, "rows": rows})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+# ==========================================================================
+# Principal negotiation cycles (read-only; changes happen in the web app)
+# ==========================================================================
+
+
+class PrincipalsInput(StrictModel):
+    only_attention: bool = Field(default=False, description="Only principals whose MOU ends soon or with open findings")
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_principals", annotations={"title": "Principals and Their Negotiations", **READ_ONLY})
+async def negotiation_principals(params: PrincipalsInput) -> str:
+    """Principals with MOU end dates, the 6-month alert, and where each negotiation is.
+
+    Examples:
+        - "Which principals' MOUs end soon?" -> only_attention=true
+        - "Where is the PT Medika Nusantara negotiation?"
+    """
+    try:
+        from .nego import service as NS
+
+        d = NS.principals()
+        rows = d["principals"]
+        if params.only_attention:
+            rows = [p for p in rows if p["mou_alert"] or (p["cycle"] and p["cycle"]["status"] == "open" and p["cycle"]["open_anomalies"])]
+        lines = [f"# Principals ({len(rows)})", ""]
+        for p in rows:
+            c = p["cycle"]
+            mou = f"MOU ends {p['mou_end']} ({p['mou_days_left']} days)" if p.get("mou_end") else "no MOU end date"
+            alert = " **— start the negotiation (MOU ends within " + str(d["alert_months"]) + " months)**" if p["mou_alert"] else ""
+            step = (f"negotiation #{c['id']} at {c['step_label']}, {c['items']} items, {c['open_anomalies']} open findings"
+                    if c else "no negotiation")
+            lines.append(f"- **{p['name']}**: {mou}; {step}{alert}")
+        return _respond(params.response_format, "\n".join(lines), {"alert_months": d["alert_months"], "principals": rows})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class CycleInput(StrictModel):
+    cycle_id: int = Field(..., ge=1, description="Negotiation (cycle) id, from negotiation_principals")
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_cycle_summary", annotations={"title": "One Principal Negotiation: Status and Impact", **READ_ONLY})
+async def negotiation_cycle_summary(params: CycleInput) -> str:
+    """Step, item counts, RFQ coverage and cost impact per step (per piece incl. PPN x 12-month volume)
+    for one principal negotiation.
+
+    Examples:
+        - "How much would the RFQ from PT Medika Nusantara cost us?"
+    """
+    try:
+        from .nego import service as NS
+
+        ov = NS.overview(params.cycle_id)
+        c, k, a = ov["cycle"], ov["kpis"], ov["anomalies"]
+        lines = [f"# {c['principal']['name']} — {c['contract_start']} to {c['contract_end']}", "",
+                 f"- Step: **{dict((s['key'], s['label']) for s in ov['steps'])[c['current_step']]}**",
+                 f"- Items: {k['items']} ({k['active']} active, {k['discontinued']} discontinued); RFQ received for {k['rfq_filled']}",
+                 f"- Baseline spend (MOU price x 12-month pieces): {rp_compact(k['baseline_spend'])}",
+                 f"- Open findings: {a['open']} ({a['open_high']} high), kept {a['kept']}, fixed {a['fixed']}", ""]
+        for st in k["stages"]:
+            if st["items"]:
+                imp = rp_compact(st["impact"]) if st["impact"] is not None else "—"
+                lines.append(f"- {st['label']}: {st['items']} items, {st['increases']} up / {st['decreases']} down, impact a year {imp}")
+        return _respond(params.response_format, "\n".join(lines), {k2: ov[k2] for k2 in ("cycle", "kpis", "anomalies")})
+    except Exception as e:  # noqa: BLE001
+        return _error(e)
+
+
+class FindingsInput(StrictModel):
+    cycle_id: int = Field(..., ge=1, description="Negotiation (cycle) id")
+    status: Literal["open", "kept", "fixed", "cleared", "all"] = Field(default="open")
+    limit: int = Field(default=30, ge=1, le=500)
+    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+
+
+@mcp.tool(name="negotiation_cycle_findings", annotations={"title": "Anomalies to Review in a Negotiation", **READ_ONLY})
+async def negotiation_cycle_findings(params: FindingsInput) -> str:
+    """The anomaly queue: typing slips, unit mix-ups, price increases (with the discount that keeps
+    the MOU price), largest/smallest changes, duplicates. Decisions are made in the web app.
+
+    Examples:
+        - "What should I check in the Medika Nusantara RFQ?"
+    """
+    try:
+        from .nego import service as NS
+
+        d = NS.anomaly_list(params.cycle_id, None if params.status == "all" else params.status)
+        rows = d["anomalies"][: params.limit]
+        lines = [f"# Findings ({len(d['anomalies'])} {params.status})", ""]
+        lines += [f"- [{r['severity']}] {r['label']} — {r['erp_code'] or ''} {r['item_name'] or ''}: {r['message']}" for r in rows]
+        return _respond(params.response_format, "\n".join(lines), {"by_rule": d["by_rule"], "anomalies": rows})
     except Exception as e:  # noqa: BLE001
         return _error(e)
 

@@ -37,6 +37,8 @@ CSRF_HEADER = "x-requested-with"
 CSRF_VALUE = "nego"
 PUBLIC_API = {"/api/auth/signin", "/api/auth/me", "/api/auth/provider"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
 
 def _secret() -> bytes:
@@ -94,19 +96,27 @@ def _deny(status: int, message: str) -> Response:
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        request.state.user = current_user(request) if path.startswith("/api/") else None
+        request.state.user = current_user(request) if path.startswith("/api/") and not path.startswith("/api/p/") else None
         if path.startswith("/api/"):
             if request.method not in SAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
                 return _deny(403, "Request blocked: missing app header")
-            if path not in PUBLIC_API:
+            # /api/p/* is the principal portal: it has its own access check (a principal link,
+            # see portal_routes.py) and never sees a Siloam session.
+            if path not in PUBLIC_API and not path.startswith("/api/p/"):
                 user = request.state.user
                 if not user:
                     return _deny(401, "Please sign in")
                 if path.startswith("/api/admin/") and user["role"] != "admin":
                     return _deny(403, "Admins only")
         response = await call_next(request)
-        if path == "/" or path.endswith(".html") or path == "/analytics":
+        if path == "/" or path.endswith(".html") or path == "/analytics" or path == "/p" or path.startswith("/p/"):
             response.headers.setdefault("Cache-Control", "no-store")
+        if not path.startswith("/api/"):
+            # Pages load only their own scripts; inline style attributes are used by the charts.
+            response.headers.setdefault("Content-Security-Policy", CSP)
+        if request.url.scheme == "https":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")

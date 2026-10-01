@@ -1,0 +1,391 @@
+Kode Barang,Nama Barang,Principal,Merk,Status,Satuan
+MED000100,IV Catheter 18G B. Braun,PT Medika Nusantara,B. Braun,Active,BOX@50
+MED000101,IV Catheter 20G BD,PT Medika Nusantara,BD,Active,Box isi 50
+MED000102,IV Catheter 22G Terumo,PT Medika Nusantara,Terumo,Active,Box isi 50
+MED000103,IV CATHETER 24G TERUMO,PT Medika Nusantara,Terumo,Active,BOX@50
+MED000104,SPUIT 1CC TERUMO,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000105,Spuit 3cc Medisafe,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000106,Spuit 5cc OneMed,PT Medika Nusantara,OneMed,Inactive,1 BOX = 100 PCS
+MED000107,Spuit 10cc OneMed,PT Medika Nusantara,OneMed,Active,1 BOX = 100 PCS
+MED000108,SPUIT 20CC BD,PT Medika Nusantara,BD,Active,1 BOX = 100 PCS
+MED000109,Sarung Tangan Nitrile S OneMed,PT Medika Nusantara,OneMed,Active,Box isi 100
+MED000110,Sarung Tangan Nitrile M Terumo,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000111,Sarung Tangan Nitrile L GEA,PT Medika Nusantara,GEA,Inactive,Box isi 100
+MED000112,Kasa Steril 5x5 B. Braun,PT Medika Nusantara,B. Braun,Active,PACK/10
+MED000113,Kasa Steril 10x10 B. Braun,PT Medika Nusantara,B. Braun,Active,PACK/10
+MED000114,KASA STERIL 16X16 BD,PT Medika Nusantara,BD,Active,PACK/10
+MED000115,Infusion Set Dewasa B. Braun,PT Medika Nusantara,B. Braun,Active,PCS
+MED000116,Infusion Set Anak B. Braun,PT Medika Nusantara,B. Braun,Active,PCS
+MED000117,Infusion Set Mikro B. Braun,PT Medika Nusantara,B. Braun,Inactive,pcs
+MED000118,MASKER BEDAH 3 PLY HIJAU TERUMO,PT Medika Nusantara,Terumo,Active,BOX@50
+MED000119,MASKER BEDAH 3 PLY BIRU MEDISAFE,PT Medika Nusantara,Medisafe,Active,BOX@50
+MED000120,Foley Catheter 12Fr B. Braun,PT Medika Nusantara,B. Braun,Active,PCS
+MED000121,Foley Catheter 14Fr Medisafe,PT Medika Nusantara,Medisafe,Active,PCS
+MED000122,Foley Catheter 16Fr GEA,PT Medika Nusantara,GEA,Active,BOX@10
+MED000123,Foley Catheter 18Fr Medisafe,PT Medika Nusantara,Medisafe,Active,PCS
+MED000124,Urine Bag 2000ml BD,PT Medika Nusantara,BD,Active,PCS
+MED000125,URINE BAG 1000ML TERUMO,PT Medika Nusantara,Terumo,Active,PCS
+MED000126,PLESTER ROLL 1 INCH ONEMED,PT Medika Nusantara,OneMed,Active,BOX@12
+MED000127,Plester Roll 2 inch B. Braun,PT Medika Nusantara,B. Braun,Inactive,ROLL
+MED000128,Needle Hypodermic 21G GEA,PT Medika Nusantara,GEA,Active,BOX@100
+MED000129,Needle Hypodermic 23G B. Braun,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000130,Needle Hypodermic 25G Medisafe,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000131,Three Way Stopcock Standard Terumo,PT Medika Nusantara,Terumo,Active,PCS
+MED000132,THREE WAY STOPCOCK EXTENSION 10CM BD,PT Medika Nusantara,BD,Active,PCS
+MED000133,Underpad 60x60 BD,PT Medika Nusantara,BD,Active,PACK/10
+MED000134,Underpad 60x90 Medisafe,PT Medika Nusantara,Medisafe,Active,PACK/10
+MED000135,Suction Catheter 10Fr BD,PT Medika Nusantara,BD,Active,PCS
+MED000136,SUCTION CATHETER 12FR MEDISAFE,PT Medika Nusantara,Medisafe,Active,PCS
+MED000137,Suction Catheter 14Fr B. Braun,PT Medika Nusantara,B. Braun,Active,PCS
+MED000138,Alcohol Swab Standard Medisafe,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000139,ECG ELECTRODE ADULT TERUMO,PT Medika Nusantara,Terumo,Active,PACK/50
+MED000140,ECG Electrode Pediatric Terumo,PT Medika Nusantara,Terumo,Active,PACK/50
+MED000141,Blood Lancet 28G B. Braun,PT Medika Nusantara,B. Braun,Active,BOX@200
+MED000142,Blood Lancet 30G BD,PT Medika Nusantara,BD,Active,BOX@200
+MED000143,IV Catheter 18G OneMed V2,PT Medika Nusantara,OneMed,Active,Box isi 50
+MED000144,IV CATHETER 20G ONEMED V2,PT Medika Nusantara,OneMed,Active,Box isi 50
+MED000145,IV Catheter 22G B. Braun V2,PT Medika Nusantara,B. Braun,Active,BOX@50
+MED000146,IV CATHETER 24G MEDISAFE V2,PT Medika Nusantara,Medisafe,Active,Box isi 50
+MED000147,SPUIT 1CC ONEMED V2,PT Medika Nusantara,OneMed,Active,BOX@100
+MED000148,Spuit 3cc OneMed V2,PT Medika Nusantara,OneMed,Active,1 BOX = 100 PCS
+MED000149,SPUIT 5CC GEA V2,PT Medika Nusantara,GEA,Active,1 BOX = 100 PCS
+MED000150,SPUIT 10CC TERUMO V2,PT Medika Nusantara,Terumo,Active,1 BOX = 100 PCS
+MED000151,Spuit 20cc BD V2,PT Medika Nusantara,BD,Active,1 BOX = 100 PCS
+MED000152,Sarung Tangan Nitrile S Medisafe V2,PT Medika Nusantara,Medisafe,Active,Box isi 100
+MED000153,SARUNG TANGAN NITRILE M TERUMO V2,PT Medika Nusantara,Terumo,Inactive,Box isi 100
+MED000154,Sarung Tangan Nitrile L Terumo V2,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000155,KASA STERIL 5X5 BD V2,PT Medika Nusantara,BD,Active,PACK/10
+MED000156,KASA STERIL 10X10 ONEMED V2,PT Medika Nusantara,OneMed,Active,PACK/10
+MED000157,KASA STERIL 16X16 TERUMO V2,PT Medika Nusantara,Terumo,Active,PACK/10
+MED000158,Infusion Set Dewasa GEA V2,PT Medika Nusantara,GEA,Active,PCS
+MED000159,Infusion Set Anak BD V2,PT Medika Nusantara,BD,Active,pcs
+MED000160,INFUSION SET MIKRO GEA V2,PT Medika Nusantara,GEA,Active,pcs
+MED000161,Masker Bedah 3 Ply Hijau GEA V2,PT Medika Nusantara,GEA,Active,BOX@50
+MED000162,Masker Bedah 3 Ply Biru BD V2,PT Medika Nusantara,BD,Active,BOX@50
+MED000163,Foley Catheter 12Fr B. Braun V2,PT Medika Nusantara,B. Braun,Active,PCS
+MED000164,FOLEY CATHETER 14FR ONEMED V2,PT Medika Nusantara,OneMed,Active,BOX@10
+MED000165,Foley Catheter 16Fr B. Braun V2,PT Medika Nusantara,B. Braun,Active,BOX@10
+MED000166,FOLEY CATHETER 18FR TERUMO V2,PT Medika Nusantara,Terumo,Active,PCS
+MED000167,URINE BAG 2000ML TERUMO V2,PT Medika Nusantara,Terumo,Active,PCS
+MED000168,Urine Bag 1000ml OneMed V2,PT Medika Nusantara,OneMed,Active,PCS
+MED000169,PLESTER ROLL 1 INCH B. BRAUN V2,PT Medika Nusantara,B. Braun,Inactive,ROLL
+MED000170,PLESTER ROLL 2 INCH B. BRAUN V2,PT Medika Nusantara,B. Braun,Active,BOX@12
+MED000171,Needle Hypodermic 21G BD V2,PT Medika Nusantara,BD,Active,BOX@100
+MED000172,Needle Hypodermic 23G B. Braun V2,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000173,NEEDLE HYPODERMIC 25G B. BRAUN V2,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000174,THREE WAY STOPCOCK STANDARD GEA V2,PT Medika Nusantara,GEA,Active,PCS
+MED000175,THREE WAY STOPCOCK EXTENSION 10CM ONEMED V2,PT Medika Nusantara,OneMed,Active,PCS
+MED000176,Underpad 60x60 GEA V2,PT Medika Nusantara,GEA,Active,PACK/10
+MED000177,Underpad 60x90 B. Braun V2,PT Medika Nusantara,B. Braun,Active,PACK/10
+MED000178,Suction Catheter 10Fr GEA V2,PT Medika Nusantara,GEA,Active,PCS
+MED000179,SUCTION CATHETER 12FR BD V2,PT Medika Nusantara,BD,Active,PCS
+MED000180,SUCTION CATHETER 14FR B. BRAUN V2,PT Medika Nusantara,B. Braun,Active,PCS
+MED000181,Alcohol Swab Standard Medisafe V2,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000182,ECG ELECTRODE ADULT TERUMO V2,PT Medika Nusantara,Terumo,Active,PACK/50
+MED000183,ECG Electrode Pediatric Terumo V2,PT Medika Nusantara,Terumo,Active,PACK/50
+MED000184,Blood Lancet 28G Terumo V2,PT Medika Nusantara,Terumo,Active,BOX@200
+MED000185,Blood Lancet 30G Terumo V2,PT Medika Nusantara,Terumo,Active,BOX@200
+MED000186,IV Catheter 18G BD V3,PT Medika Nusantara,BD,Active,BOX@50
+MED000187,IV Catheter 20G B. Braun V3,PT Medika Nusantara,B. Braun,Active,BOX@50
+MED000188,IV Catheter 22G GEA V3,PT Medika Nusantara,GEA,Active,Box isi 50
+MED000189,IV CATHETER 24G ONEMED V3,PT Medika Nusantara,OneMed,Active,Box isi 50
+MED000190,SPUIT 1CC TERUMO V3,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000191,SPUIT 3CC MEDISAFE V3,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000192,SPUIT 5CC MEDISAFE V3,PT Medika Nusantara,Medisafe,Active,1 BOX = 100 PCS
+MED000193,Spuit 10cc BD V3,PT Medika Nusantara,BD,Active,BOX@100
+MED000194,Spuit 20cc BD V3,PT Medika Nusantara,BD,Active,1 BOX = 100 PCS
+MED000195,SARUNG TANGAN NITRILE S ONEMED V3,PT Medika Nusantara,OneMed,Active,BOX@100
+MED000196,Sarung Tangan Nitrile M BD V3,PT Medika Nusantara,BD,Active,BOX@100
+MED000197,SARUNG TANGAN NITRILE L BD V3,PT Medika Nusantara,BD,Active,BOX@100
+MED000198,Kasa Steril 5x5 Terumo V3,PT Medika Nusantara,Terumo,Inactive,PACK/10
+MED000199,Kasa Steril 10x10 GEA V3,PT Medika Nusantara,GEA,Active,PAK 10
+MED000200,Kasa Steril 16x16 Terumo V3,PT Medika Nusantara,Terumo,Active,PAK 10
+MED000201,Infusion Set Dewasa Terumo V3,PT Medika Nusantara,Terumo,Active,PCS
+MED000202,Infusion Set Anak OneMed V3,PT Medika Nusantara,OneMed,Active,pcs
+MED000203,Infusion Set Mikro BD V3,PT Medika Nusantara,BD,Active,pcs
+MED000204,MASKER BEDAH 3 PLY HIJAU TERUMO V3,PT Medika Nusantara,Terumo,Active,BOX@50
+MED000205,MASKER BEDAH 3 PLY BIRU ONEMED V3,PT Medika Nusantara,OneMed,Active,BOX@50
+MED000206,Foley Catheter 12Fr OneMed V3,PT Medika Nusantara,OneMed,Active,BOX@10
+MED000207,Foley Catheter 14Fr B. Braun V3,PT Medika Nusantara,B. Braun,Active,BOX@10
+MED000208,FOLEY CATHETER 16FR GEA V3,PT Medika Nusantara,GEA,Active,BOX@10
+MED000209,FOLEY CATHETER 18FR MEDISAFE V3,PT Medika Nusantara,Medisafe,Active,PCS
+MED000210,Urine Bag 2000ml Terumo V3,PT Medika Nusantara,Terumo,Active,PCS
+MED000211,Urine Bag 1000ml BD V3,PT Medika Nusantara,BD,Active,PCS
+MED000212,PLESTER ROLL 1 INCH ONEMED V3,PT Medika Nusantara,OneMed,Active,ROLL
+MED000213,PLESTER ROLL 2 INCH BD V3,PT Medika Nusantara,BD,Active,ROLL
+MED000214,Needle Hypodermic 21G GEA V3,PT Medika Nusantara,GEA,Active,BOX@100
+MED000215,Needle Hypodermic 23G B. Braun V3,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000216,NEEDLE HYPODERMIC 25G TERUMO V3,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000217,Three Way Stopcock Standard Terumo V3,PT Medika Nusantara,Terumo,Active,PCS
+MED000218,Three Way Stopcock Extension 10cm BD V3,PT Medika Nusantara,BD,Active,PCS
+MED000219,UNDERPAD 60X60 BD V3,PT Medika Nusantara,BD,Active,PACK/10
+MED000220,Underpad 60x90 B. Braun V3,PT Medika Nusantara,B. Braun,Active,PACK/10
+MED000221,Suction Catheter 10Fr B. Braun V3,PT Medika Nusantara,B. Braun,Active,PCS
+MED000222,Suction Catheter 12Fr B. Braun V3,PT Medika Nusantara,B. Braun,Active,PCS
+MED000223,Suction Catheter 14Fr BD V3,PT Medika Nusantara,BD,Active,PCS
+MED000224,ALCOHOL SWAB STANDARD BD V3,PT Medika Nusantara,BD,Active,BOX@100
+MED000225,ECG Electrode Adult GEA V3,PT Medika Nusantara,GEA,Active,PACK/50
+MED000226,ECG Electrode Pediatric B. Braun V3,PT Medika Nusantara,B. Braun,Active,PACK/50
+MED000227,Blood Lancet 28G B. Braun V3,PT Medika Nusantara,B. Braun,Active,BOX@200
+MED000228,BLOOD LANCET 30G MEDISAFE V3,PT Medika Nusantara,Medisafe,Active,BOX@200
+MED000229,IV CATHETER 18G MEDISAFE V4,PT Medika Nusantara,Medisafe,Active,BX 50 PCS
+MED000230,IV Catheter 20G OneMed V4,PT Medika Nusantara,OneMed,Active,Box isi 50
+MED000231,IV Catheter 22G Medisafe V4,PT Medika Nusantara,Medisafe,Active,BX 50 PCS
+MED000232,IV CATHETER 24G MEDISAFE V4,PT Medika Nusantara,Medisafe,Active,BOX@50
+MED000233,SPUIT 1CC B. BRAUN V4,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000234,Spuit 3cc Terumo V4,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000235,Spuit 5cc Medisafe V4,PT Medika Nusantara,Medisafe,Active,BOX@100
+MED000236,SPUIT 10CC BD V4,PT Medika Nusantara,BD,Active,BOX@100
+MED000237,Spuit 20cc Terumo V4,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000238,SARUNG TANGAN NITRILE S BD V4,PT Medika Nusantara,BD,Active,Box isi 100
+MED000239,SARUNG TANGAN NITRILE M TERUMO V4,PT Medika Nusantara,Terumo,Active,Box isi 100
+MED000240,SARUNG TANGAN NITRILE L ONEMED V4,PT Medika Nusantara,OneMed,Active,BOX@100
+MED000241,Kasa Steril 5x5 OneMed V4,PT Medika Nusantara,OneMed,Active,PACK/10
+MED000242,Kasa Steril 10x10 Medisafe V4,PT Medika Nusantara,Medisafe,Active,PAK 10
+MED000243,Kasa Steril 16x16 OneMed V4,PT Medika Nusantara,OneMed,Active,PACK/10
+MED000244,Infusion Set Dewasa BD V4,PT Medika Nusantara,BD,Active,PCS
+MED000245,INFUSION SET ANAK BD V4,PT Medika Nusantara,BD,Active,pcs
+MED000246,Infusion Set Mikro Medisafe V4,PT Medika Nusantara,Medisafe,Active,pcs
+MED000247,MASKER BEDAH 3 PLY HIJAU BD V4,PT Medika Nusantara,BD,Active,BOX@50
+MED000248,Masker Bedah 3 Ply Biru GEA V4,PT Medika Nusantara,GEA,Active,BOX@50
+MED000249,Foley Catheter 12Fr Medisafe V4,PT Medika Nusantara,Medisafe,Active,BOX@10
+MED000250,FOLEY CATHETER 14FR BD V4,PT Medika Nusantara,BD,Active,PCS
+MED000251,Foley Catheter 16Fr B. Braun V4,PT Medika Nusantara,B. Braun,Active,PCS
+MED000252,Foley Catheter 18Fr Medisafe V4,PT Medika Nusantara,Medisafe,Active,PCS
+MED000253,Urine Bag 2000ml B. Braun V4,PT Medika Nusantara,B. Braun,Active,PCS
+MED000254,URINE BAG 1000ML TERUMO V4,PT Medika Nusantara,Terumo,Active,PCS
+MED000255,Plester Roll 1 inch OneMed V4,PT Medika Nusantara,OneMed,Active,ROLL
+MED000256,PLESTER ROLL 2 INCH TERUMO V4,PT Medika Nusantara,Terumo,Active,ROLL
+MED000257,Needle Hypodermic 21G GEA V4,PT Medika Nusantara,GEA,Active,BOX@100
+MED000258,NEEDLE HYPODERMIC 23G B. BRAUN V4,PT Medika Nusantara,B. Braun,Active,BOX@100
+MED000259,NEEDLE HYPODERMIC 25G BD V4,PT Medika Nusantara,BD,Active,BOX@100
+MED000260,Three Way Stopcock Standard Terumo V4,PT Medika Nusantara,Terumo,Active,PCS
+MED000261,Three Way Stopcock Extension 10cm Medisafe V4,PT Medika Nusantara,Medisafe,Active,PCS
+MED000262,Underpad 60x60 GEA V4,PT Medika Nusantara,GEA,Active,PACK/10
+MED000263,UNDERPAD 60X90 ONEMED V4,PT Medika Nusantara,OneMed,Active,PACK/10
+MED000264,Suction Catheter 10Fr OneMed V4,PT Medika Nusantara,OneMed,Active,PCS
+MED000265,SUCTION CATHETER 12FR TERUMO V4,PT Medika Nusantara,Terumo,Active,PCS
+MED000266,Suction Catheter 14Fr GEA V4,PT Medika Nusantara,GEA,Active,PCS
+MED000267,Alcohol Swab Standard Terumo V4,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000268,ECG ELECTRODE ADULT ONEMED V4,PT Medika Nusantara,OneMed,Active,PACK/50
+MED000269,ECG Electrode Pediatric B. Braun V4,PT Medika Nusantara,B. Braun,Active,PACK/50
+MED000270,BLOOD LANCET 28G B. BRAUN V4,PT Medika Nusantara,B. Braun,Active,BOX@200
+MED000271,Blood Lancet 30G B. Braun V4,PT Medika Nusantara,B. Braun,Active,BOX@200
+MED000272,IV Catheter 18G OneMed V5,PT Medika Nusantara,OneMed,Active,Box isi 50
+MED000273,IV Catheter 20G B. Braun V5,PT Medika Nusantara,B. Braun,Active,BX 50 PCS
+MED000274,IV Catheter 22G BD V5,PT Medika Nusantara,BD,Active,Box isi 50
+MED000275,IV Catheter 24G BD V5,PT Medika Nusantara,BD,Active,Box isi 50
+MED000276,Spuit 1cc OneMed V5,PT Medika Nusantara,OneMed,Active,BOX@100
+MED000277,Spuit 3cc OneMed V5,PT Medika Nusantara,OneMed,Active,1 BOX = 100 PCS
+MED000278,Spuit 5cc Terumo V5,PT Medika Nusantara,Terumo,Active,BOX@100
+MED000279,Spuit 10cc Terumo V5,PT Medika Nusantara,Terumo,Inactive,1 BOX = 100 PCS
+OBT000330,Ceftriaxone 1g Inj Dexa,PT Farmasi Sejahtera,Dexa,Active,VIAL
+OBT000331,Omeprazole 40mg Inj Sanbe,PT Farmasi Sejahtera,Sanbe,Active,STRIP 10 CAP
+OBT000332,Omeprazole 20mg Cap Sanbe,PT Farmasi Sejahtera,Sanbe,Active,VIAL
+OBT000333,PARACETAMOL 500MG TAB HEXPHARM,PT Farmasi Sejahtera,Hexpharm,Active,BTL
+OBT000334,PARACETAMOL 1G/100ML INF NOVELL,PT Farmasi Sejahtera,Novell,Active,BTL
+OBT000335,ONDANSETRON 4MG/2ML AMP DEXA,PT Farmasi Sejahtera,Dexa,Inactive,AMP
+OBT000336,ONDANSETRON 8MG/4ML AMP KALBE,PT Farmasi Sejahtera,Kalbe,Active,BOX 5 AMP
+OBT000337,RANITIDINE 50MG/2ML AMP NOVELL,PT Farmasi Sejahtera,Novell,Active,BOX 10 AMP
+OBT000338,Ketorolac 30mg/ml Amp Hexpharm,PT Farmasi Sejahtera,Hexpharm,Active,BOX 10 AMP
+OBT000339,MEROPENEM 1G INJ NOVELL,PT Farmasi Sejahtera,Novell,Active,VIAL
+OBT000340,Amlodipine 5mg Tab Kalbe,PT Farmasi Sejahtera,Kalbe,Active,STRIP 10 TAB
+OBT000341,Amlodipine 10mg Tab Kalbe,PT Farmasi Sejahtera,Kalbe,Active,STRIP 10 TAB
+OBT000342,Metformin 500mg Tab Hexpharm,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 TAB
+OBT000343,METFORMIN 850MG TAB HEXPHARM,PT Farmasi Sejahtera,Hexpharm,Inactive,STRIP 10 TAB
+OBT000344,Dexamethasone 5mg/ml Amp Dexa,PT Farmasi Sejahtera,Dexa,Active,BOX 10 AMP
+OBT000345,Furosemide 20mg/2ml Amp Kalbe,PT Farmasi Sejahtera,Kalbe,Active,BOX 5 AMP
+OBT000346,Furosemide 40mg Tab Hexpharm,PT Farmasi Sejahtera,Hexpharm,Active,BOX 5 AMP
+OBT000347,Ringer Laktat 500ml Novell,PT Farmasi Sejahtera,Novell,Active,BTL
+OBT000348,NaCl 0.9% 500ml Sanbe,PT Farmasi Sejahtera,Sanbe,Active,BTL
+OBT000349,NACL 0.9% 100ML KALBE,PT Farmasi Sejahtera,Kalbe,Active,BTL
+OBT000350,Ceftriaxone 1g Inj Hexpharm V2,PT Farmasi Sejahtera,Hexpharm,Active,VIAL
+OBT000351,Omeprazole 40mg Inj Hexpharm V2,PT Farmasi Sejahtera,Hexpharm,Active,VIAL
+OBT000352,Omeprazole 20mg Cap Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,STRIP 10 CAP
+OBT000353,Paracetamol 500mg Tab Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,STRIP 10 TAB
+OBT000354,Paracetamol 1g/100ml Inf Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,STRIP 10 TAB
+OBT000355,Ondansetron 4mg/2ml Amp Novell V2,PT Farmasi Sejahtera,Novell,Active,AMP
+OBT000356,Ondansetron 8mg/4ml Amp Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,BOX 5 AMP
+OBT000357,Ranitidine 50mg/2ml Amp Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,BOX 10 AMP
+OBT000358,Ketorolac 30mg/ml Amp Hexpharm V2,PT Farmasi Sejahtera,Hexpharm,Active,BOX 10 AMP
+OBT000359,Meropenem 1g Inj Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,VIAL
+OBT000360,Amlodipine 5mg Tab Hexpharm V2,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 TAB
+OBT000361,AMLODIPINE 10MG TAB DEXA V2,PT Farmasi Sejahtera,Dexa,Active,STRIP 10 TAB
+OBT000362,METFORMIN 500MG TAB SANBE V2,PT Farmasi Sejahtera,Sanbe,Active,STRIP 10 TAB
+OBT000363,Metformin 850mg Tab Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,STRIP 10 TAB
+OBT000364,Dexamethasone 5mg/ml Amp Sanbe V2,PT Farmasi Sejahtera,Sanbe,Active,BOX 10 AMP
+OBT000365,FUROSEMIDE 20MG/2ML AMP HEXPHARM V2,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 TAB
+OBT000366,Furosemide 40mg Tab Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,STRIP 10 TAB
+OBT000367,Ringer Laktat 500ml Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,CTN 20 BTL
+OBT000368,NaCl 0.9% 500ml Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,BTL
+OBT000369,NaCl 0.9% 100ml Kalbe V2,PT Farmasi Sejahtera,Kalbe,Active,BTL
+OBT000370,Ceftriaxone 1g Inj Sanbe V3,PT Farmasi Sejahtera,Sanbe,Active,VIAL
+OBT000371,Omeprazole 40mg Inj Hexpharm V3,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 CAP
+OBT000372,Omeprazole 20mg Cap Hexpharm V3,PT Farmasi Sejahtera,Hexpharm,Active,VIAL
+OBT000373,Paracetamol 500mg Tab Dexa V3,PT Farmasi Sejahtera,Dexa,Active,STRIP 10 TAB
+OBT000374,Paracetamol 1g/100ml Inf Novell V3,PT Farmasi Sejahtera,Novell,Active,STRIP 10 TAB
+OBT000375,ONDANSETRON 4MG/2ML AMP NOVELL V3,PT Farmasi Sejahtera,Novell,Active,AMP
+OBT000376,ONDANSETRON 8MG/4ML AMP HEXPHARM V3,PT Farmasi Sejahtera,Hexpharm,Active,AMP
+OBT000377,Ranitidine 50mg/2ml Amp Dexa V3,PT Farmasi Sejahtera,Dexa,Active,BOX 10 AMP
+OBT000378,Ketorolac 30mg/ml Amp Dexa V3,PT Farmasi Sejahtera,Dexa,Active,BOX 10 AMP
+OBT000379,MEROPENEM 1G INJ HEXPHARM V3,PT Farmasi Sejahtera,Hexpharm,Active,VIAL
+OBT000380,Amlodipine 5mg Tab Dexa V3,PT Farmasi Sejahtera,Dexa,Active,STRIP 10 TAB
+OBT000381,AMLODIPINE 10MG TAB DEXA V3,PT Farmasi Sejahtera,Dexa,Active,BOX 30 TAB
+OBT000382,Metformin 500mg Tab Hexpharm V3,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 TAB
+OBT000383,Metformin 850mg Tab Novell V3,PT Farmasi Sejahtera,Novell,Active,STRIP 10 TAB
+OBT000384,DEXAMETHASONE 5MG/ML AMP HEXPHARM V3,PT Farmasi Sejahtera,Hexpharm,Active,BOX 10 AMP
+OBT000385,Furosemide 20mg/2ml Amp Hexpharm V3,PT Farmasi Sejahtera,Hexpharm,Active,BOX 5 AMP
+OBT000386,FUROSEMIDE 40MG TAB KALBE V3,PT Farmasi Sejahtera,Kalbe,Active,STRIP 10 TAB
+OBT000387,RINGER LAKTAT 500ML DEXA V3,PT Farmasi Sejahtera,Dexa,Active,CTN 20 BTL
+OBT000388,NACL 0.9% 500ML HEXPHARM V3,PT Farmasi Sejahtera,Hexpharm,Active,BTL
+OBT000389,NaCl 0.9% 100ml Novell V3,PT Farmasi Sejahtera,Novell,Inactive,BTL
+OBT000390,Ceftriaxone 1g Inj Hexpharm V4,PT Farmasi Sejahtera,Hexpharm,Active,BOX 10 VIAL
+OBT000391,Omeprazole 40mg Inj Kalbe V4,PT Farmasi Sejahtera,Kalbe,Active,VIAL
+OBT000392,Omeprazole 20mg Cap Hexpharm V4,PT Farmasi Sejahtera,Hexpharm,Active,VIAL
+OBT000393,Paracetamol 500mg Tab Hexpharm V4,PT Farmasi Sejahtera,Hexpharm,Active,STRIP 10 TAB
+OBT000394,Paracetamol 1g/100ml Inf Kalbe V4,PT Farmasi Sejahtera,Kalbe,Active,BTL
+OBT000395,ONDANSETRON 4MG/2ML AMP SANBE V4,PT Farmasi Sejahtera,Sanbe,Active,BOX 5 AMP
+OBT000396,ONDANSETRON 8MG/4ML AMP HEXPHARM V4,PT Farmasi Sejahtera,Hexpharm,Inactive,AMP
+OBT000397,Ranitidine 50mg/2ml Amp Kalbe V4,PT Farmasi Sejahtera,Kalbe,Active,BOX 10 AMP
+OBT000398,KETOROLAC 30MG/ML AMP KALBE V4,PT Farmasi Sejahtera,Kalbe,Active,BOX 10 AMP
+OBT000399,Meropenem 1g Inj Kalbe V4,PT Farmasi Sejahtera,Kalbe,Active,VIAL
+MED000450,IV CATHETER 18G ONEMED,PT Alkes Prima,OneMed,Active,BOX@50
+MED000451,IV CATHETER 20G BD,PT Alkes Prima,BD,Active,BOX@50
+MED000452,IV Catheter 22G GEA,PT Alkes Prima,GEA,Active,BX 50 PCS
+MED000453,IV Catheter 24G OneMed,PT Alkes Prima,OneMed,Active,BX 50 PCS
+MED000454,SPUIT 1CC B. BRAUN,PT Alkes Prima,B. Braun,Active,BOX@100
+MED000455,Spuit 3cc Medisafe,PT Alkes Prima,Medisafe,Active,BOX@100
+MED000456,SPUIT 5CC ONEMED,PT Alkes Prima,OneMed,Active,1 BOX = 100 PCS
+MED000457,Spuit 10cc B. Braun,PT Alkes Prima,B. Braun,Active,1 BOX = 100 PCS
+MED000458,Spuit 20cc OneMed,PT Alkes Prima,OneMed,Active,BOX@100
+MED000459,SARUNG TANGAN NITRILE S GEA,PT Alkes Prima,GEA,Active,BOX@100
+MED000460,Sarung Tangan Nitrile M B. Braun,PT Alkes Prima,B. Braun,Inactive,BOX@100
+MED000461,Sarung Tangan Nitrile L Medisafe,PT Alkes Prima,Medisafe,Active,Box isi 100
+MED000462,Kasa Steril 5x5 OneMed,PT Alkes Prima,OneMed,Active,PAK 10
+MED000463,Kasa Steril 10x10 BD,PT Alkes Prima,BD,Active,PACK/10
+MED000464,Kasa Steril 16x16 Medisafe,PT Alkes Prima,Medisafe,Active,PAK 10
+MED000465,Infusion Set Dewasa OneMed,PT Alkes Prima,OneMed,Active,PCS
+MED000466,Infusion Set Anak GEA,PT Alkes Prima,GEA,Active,pcs
+MED000467,INFUSION SET MIKRO B. BRAUN,PT Alkes Prima,B. Braun,Active,pcs
+MED000468,Masker Bedah 3 Ply Hijau OneMed,PT Alkes Prima,OneMed,Active,BOX@50
+MED000469,MASKER BEDAH 3 PLY BIRU MEDISAFE,PT Alkes Prima,Medisafe,Active,BOX@50
+MED000470,Foley Catheter 12Fr GEA,PT Alkes Prima,GEA,Active,BOX@10
+MED000471,Foley Catheter 14Fr Terumo,PT Alkes Prima,Terumo,Inactive,PCS
+MED000472,Foley Catheter 16Fr B. Braun,PT Alkes Prima,B. Braun,Active,BOX@10
+MED000473,FOLEY CATHETER 18FR ONEMED,PT Alkes Prima,OneMed,Active,BOX@10
+MED000474,Urine Bag 2000ml Terumo,PT Alkes Prima,Terumo,Active,PCS
+MED000475,Urine Bag 1000ml OneMed,PT Alkes Prima,OneMed,Active,PCS
+MED000476,Plester Roll 1 inch Medisafe,PT Alkes Prima,Medisafe,Active,ROLL
+MED000477,PLESTER ROLL 2 INCH BD,PT Alkes Prima,BD,Active,ROLL
+MED000478,Needle Hypodermic 21G OneMed,PT Alkes Prima,OneMed,Active,BOX@100
+MED000479,Needle Hypodermic 23G Medisafe,PT Alkes Prima,Medisafe,Active,BOX@100
+MED000480,NEEDLE HYPODERMIC 25G TERUMO,PT Alkes Prima,Terumo,Active,BOX@100
+MED000481,Three Way Stopcock Standard BD,PT Alkes Prima,BD,Active,PCS
+MED000482,Three Way Stopcock Extension 10cm Medisafe,PT Alkes Prima,Medisafe,Active,PCS
+MED000483,Underpad 60x60 Medisafe,PT Alkes Prima,Medisafe,Active,PACK/10
+MED000484,UNDERPAD 60X90 ONEMED,PT Alkes Prima,OneMed,Active,PACK/10
+MED000485,SUCTION CATHETER 10FR TERUMO,PT Alkes Prima,Terumo,Active,PCS
+MED000486,Suction Catheter 12Fr OneMed,PT Alkes Prima,OneMed,Active,PCS
+MED000487,SUCTION CATHETER 14FR BD,PT Alkes Prima,BD,Active,PCS
+MED000488,Alcohol Swab Standard B. Braun,PT Alkes Prima,B. Braun,Active,BOX@100
+MED000489,ECG ELECTRODE ADULT MEDISAFE,PT Alkes Prima,Medisafe,Active,PACK/50
+MED000490,ECG ELECTRODE PEDIATRIC ONEMED,PT Alkes Prima,OneMed,Active,PACK/50
+MED000491,Blood Lancet 28G GEA,PT Alkes Prima,GEA,Active,BOX@200
+MED000492,Blood Lancet 30G Medisafe,PT Alkes Prima,Medisafe,Active,BOX@200
+MED000493,IV CATHETER 18G GEA V2,PT Alkes Prima,GEA,Active,Box isi 50
+MED000494,IV Catheter 20G Medisafe V2,PT Alkes Prima,Medisafe,Active,BOX@50
+MED000545,Glucose Reagent 4x50ml Roche,PT Bio Diagnostik,Roche,Active,KIT
+MED000546,Glucose Reagent 2x100ml Biosystems,PT Bio Diagnostik,Biosystems,Active,KIT
+MED000547,HbA1c Test Cartridge Roche,PT Bio Diagnostik,Roche,Active,BOX 10 TEST
+MED000548,Urinalysis Strip 10 Param Diasys,PT Bio Diagnostik,Diasys,Inactive,BOTTLE 100 TEST
+MED000549,CRP LATEX 100 TEST ROCHE,PT Bio Diagnostik,Roche,Active,KIT
+MED000550,Blood Tube EDTA 3ml Biosystems,PT Bio Diagnostik,Biosystems,Active,BOX@100
+MED000551,Blood Tube EDTA 2ml Biosystems,PT Bio Diagnostik,Biosystems,Active,BOX@100
+MED000552,Blood Tube Serum 5ml Diasys,PT Bio Diagnostik,Diasys,Active,BOX@100
+MED000553,Glucose Reagent 4x50ml Diasys V2,PT Bio Diagnostik,Diasys,Active,KIT
+MED000554,GLUCOSE REAGENT 2X100ML BIOSYSTEMS V2,PT Bio Diagnostik,Biosystems,Active,KIT
+MED000555,HbA1c Test Cartridge Diasys V2,PT Bio Diagnostik,Diasys,Active,BOX 10 TEST
+MED000556,Urinalysis Strip 10 Param Roche V2,PT Bio Diagnostik,Roche,Active,BOTTLE 100 TEST
+MED000557,CRP Latex 100 test Roche V2,PT Bio Diagnostik,Roche,Active,KIT
+MED000558,Blood Tube EDTA 3ml Biosystems V2,PT Bio Diagnostik,Biosystems,Active,BOX@100
+MED000559,Blood Tube EDTA 2ml Biosystems V2,PT Bio Diagnostik,Biosystems,Active,BOX@100
+MED000560,BLOOD TUBE SERUM 5ML ROCHE V2,PT Bio Diagnostik,Roche,Active,BOX@100
+MED000561,GLUCOSE REAGENT 4X50ML SYSMEX V3,PT Bio Diagnostik,Sysmex,Active,KIT
+MED000562,GLUCOSE REAGENT 2X100ML SYSMEX V3,PT Bio Diagnostik,Sysmex,Active,KIT
+MED000563,HbA1c Test Cartridge Sysmex V3,PT Bio Diagnostik,Sysmex,Active,BOX 10 TEST
+MED000564,URINALYSIS STRIP 10 PARAM BIOSYSTEMS V3,PT Bio Diagnostik,Biosystems,Inactive,BOTTLE 100 TEST
+MED000565,CRP Latex 100 test Roche V3,PT Bio Diagnostik,Roche,Active,KIT
+MED000566,BLOOD TUBE EDTA 3ML ROCHE V3,PT Bio Diagnostik,Roche,Active,BOX@100
+MED000567,Blood Tube EDTA 2ml Roche V3,PT Bio Diagnostik,Roche,Active,BOX@100
+MED000568,BLOOD TUBE SERUM 5ML DIASYS V3,PT Bio Diagnostik,Diasys,Active,BOX@100
+MED000569,Glucose Reagent 4x50ml Biosystems V4,PT Bio Diagnostik,Biosystems,Active,KIT
+MED000570,GLUCOSE REAGENT 2X100ML BIOSYSTEMS V4,PT Bio Diagnostik,Biosystems,Active,KIT
+MED000571,HBA1C TEST CARTRIDGE SYSMEX V4,PT Bio Diagnostik,Sysmex,Active,BOX 10 TEST
+MED000572,Urinalysis Strip 10 Param Diasys V4,PT Bio Diagnostik,Diasys,Active,BOTTLE 100 TEST
+MED000573,CRP Latex 100 test Roche V4,PT Bio Diagnostik,Roche,Active,KIT
+MED000574,BLOOD TUBE EDTA 3ML DIASYS V4,PT Bio Diagnostik,Diasys,Active,BOX@100
+MED000625,IV Catheter 18G BD,PT Sarana Steril,BD,Active,BOX@50
+MED000626,IV Catheter 20G Terumo,PT Sarana Steril,Terumo,Active,BOX@50
+MED000627,IV Catheter 22G B. Braun,PT Sarana Steril,B. Braun,Active,BX 50 PCS
+MED000628,IV Catheter 24G Medisafe,PT Sarana Steril,Medisafe,Active,BOX@50
+MED000629,Spuit 1cc B. Braun,PT Sarana Steril,B. Braun,Active,BOX@100
+MED000630,Spuit 3cc OneMed,PT Sarana Steril,OneMed,Active,1 BOX = 100 PCS
+MED000631,Spuit 5cc GEA,PT Sarana Steril,GEA,Active,1 BOX = 100 PCS
+MED000632,Spuit 10cc BD,PT Sarana Steril,BD,Active,BOX@100
+MED000633,SPUIT 20CC TERUMO,PT Sarana Steril,Terumo,Active,BOX@100
+MED000634,SARUNG TANGAN NITRILE S TERUMO,PT Sarana Steril,Terumo,Active,Box isi 100
+MED000635,Sarung Tangan Nitrile M BD,PT Sarana Steril,BD,Active,Box isi 100
+MED000636,SARUNG TANGAN NITRILE L TERUMO,PT Sarana Steril,Terumo,Active,Box isi 100
+MED000637,Kasa Steril 5x5 Medisafe,PT Sarana Steril,Medisafe,Active,PACK/10
+MED000638,Kasa Steril 10x10 Terumo,PT Sarana Steril,Terumo,Inactive,PAK 10
+MED000639,Kasa Steril 16x16 GEA,PT Sarana Steril,GEA,Active,PACK/10
+MED000640,Infusion Set Dewasa B. Braun,PT Sarana Steril,B. Braun,Active,pcs
+MED000641,Infusion Set Anak GEA,PT Sarana Steril,GEA,Active,pcs
+MED000642,INFUSION SET MIKRO B. BRAUN,PT Sarana Steril,B. Braun,Active,pcs
+MED000643,MASKER BEDAH 3 PLY HIJAU B. BRAUN,PT Sarana Steril,B. Braun,Active,BOX@50
+MED000644,Masker Bedah 3 Ply Biru Medisafe,PT Sarana Steril,Medisafe,Active,BOX@50
+MED000645,Foley Catheter 12Fr Medisafe,PT Sarana Steril,Medisafe,Active,PCS
+MED000646,Foley Catheter 14Fr B. Braun,PT Sarana Steril,B. Braun,Active,PCS
+MED000647,Foley Catheter 16Fr Medisafe,PT Sarana Steril,Medisafe,Active,PCS
+MED000648,Foley Catheter 18Fr B. Braun,PT Sarana Steril,B. Braun,Active,BOX@10
+MED000649,Urine Bag 2000ml BD,PT Sarana Steril,BD,Active,PCS
+MED000650,Urine Bag 1000ml OneMed,PT Sarana Steril,OneMed,Active,PCS
+MED000651,Plester Roll 1 inch BD,PT Sarana Steril,BD,Active,ROLL
+MED000652,PLESTER ROLL 2 INCH ONEMED,PT Sarana Steril,OneMed,Active,ROLL
+MED000653,NEEDLE HYPODERMIC 21G GEA,PT Sarana Steril,GEA,Inactive,BOX@100
+MED000654,Needle Hypodermic 23G GEA,PT Sarana Steril,GEA,Active,BOX@100
+MED000655,Needle Hypodermic 25G Medisafe,PT Sarana Steril,Medisafe,Active,BOX@100
+MED000656,Three Way Stopcock Standard Medisafe,PT Sarana Steril,Medisafe,Active,BOX@50
+MED000657,Three Way Stopcock Extension 10cm Terumo,PT Sarana Steril,Terumo,Active,BOX@50
+MED000658,Underpad 60x60 GEA,PT Sarana Steril,GEA,Active,PACK/10
+MED000659,Underpad 60x90 BD,PT Sarana Steril,BD,Active,PACK/10
+MED000660,SUCTION CATHETER 10FR TERUMO,PT Sarana Steril,Terumo,Active,PCS
+MED000661,Suction Catheter 12Fr BD,PT Sarana Steril,BD,Active,PCS
+MED000662,Suction Catheter 14Fr BD,PT Sarana Steril,BD,Active,PCS
+MED000663,ALCOHOL SWAB STANDARD GEA,PT Sarana Steril,GEA,Active,BOX@100
+MED000664,ECG ELECTRODE ADULT BD,PT Sarana Steril,BD,Active,PACK/50
+MED000715,IV Catheter 18G OneMed,PT Global Infus,OneMed,Active,BOX@50
+MED000716,IV Catheter 20G Medisafe,PT Global Infus,Medisafe,Active,BX 50 PCS
+MED000717,IV Catheter 22G GEA,PT Global Infus,GEA,Active,BOX@50
+MED000718,IV Catheter 24G Medisafe,PT Global Infus,Medisafe,Active,BOX@50
+MED000719,Spuit 1cc Terumo,PT Global Infus,Terumo,Active,1 BOX = 100 PCS
+MED000720,Spuit 3cc GEA,PT Global Infus,GEA,Active,1 BOX = 100 PCS
+MED000721,Spuit 5cc OneMed,PT Global Infus,OneMed,Active,1 BOX = 100 PCS
+MED000722,Spuit 10cc Medisafe,PT Global Infus,Medisafe,Active,1 BOX = 100 PCS
+MED000723,Spuit 20cc Medisafe,PT Global Infus,Medisafe,Active,1 BOX = 100 PCS
+MED000724,Sarung Tangan Nitrile S BD,PT Global Infus,BD,Active,BOX@100
+MED000725,Sarung Tangan Nitrile M GEA,PT Global Infus,GEA,Active,Box isi 100
+MED000726,Sarung Tangan Nitrile L BD,PT Global Infus,BD,Active,BOX@100
+MED000727,KASA STERIL 5X5 B. BRAUN,PT Global Infus,B. Braun,Active,PAK 10
+MED000728,Kasa Steril 10x10 GEA,PT Global Infus,GEA,Active,PAK 10
+MED000729,KASA STERIL 16X16 ONEMED,PT Global Infus,OneMed,Active,PACK/10
+MED000730,Infusion Set Dewasa Medisafe,PT Global Infus,Medisafe,Active,pcs
+MED000731,INFUSION SET ANAK B. BRAUN,PT Global Infus,B. Braun,Active,pcs
+MED000732,INFUSION SET MIKRO TERUMO,PT Global Infus,Terumo,Active,pcs
+MED000733,Masker Bedah 3 Ply Hijau Medisafe,PT Global Infus,Medisafe,Active,BOX@50
+MED000734,MASKER BEDAH 3 PLY BIRU B. BRAUN,PT Global Infus,B. Braun,Active,BOX@50
+MED000735,FOLEY CATHETER 12FR B. BRAUN,PT Global Infus,B. Braun,Active,BOX@10
+MED000736,Foley Catheter 14Fr Terumo,PT Global Infus,Terumo,Active,BOX@10
+MED000737,Foley Catheter 16Fr Terumo,PT Global Infus,Terumo,Active,PCS
+MED000738,FOLEY CATHETER 18FR BD,PT Global Infus,BD,Active,BOX@10
+MED000739,Urine Bag 2000ml GEA,PT Global Infus,GEA,Active,PCS
