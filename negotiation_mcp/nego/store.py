@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS principal_links (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
   token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL,
   expires_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT, last_used_at TEXT);
+CREATE TABLE IF NOT EXISTS outbox (
+  id INTEGER PRIMARY KEY, cycle_id INTEGER REFERENCES cycles(id) ON DELETE CASCADE, event TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'webhook', recipient TEXT, payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+  created_at TEXT NOT NULL, created_by TEXT, next_try_at TEXT, sent_at TEXT);
 CREATE TABLE IF NOT EXISTS item_changes (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL, item_id INTEGER NOT NULL, at TEXT NOT NULL,
   user_email TEXT NOT NULL, field TEXT NOT NULL, old TEXT, new TEXT, via TEXT);
@@ -421,6 +426,77 @@ def revoke_link(cid: int, lid: int, by: str) -> None:
         if not cur.rowcount:
             raise EngineError("No such active link")
         _event(con, cid, by, "link.revoke", {"id": lid})
+
+
+# ---------------------------------------------------------------- outbox
+
+def queue_message(cid: int | None, event: str, recipient: str, payload: dict, by: str, status: str = "queued",
+                  error: str | None = None) -> int:
+    with connect() as con:
+        cur = con.execute(
+            "INSERT INTO outbox (cycle_id, event, recipient, payload, status, last_error, created_at, created_by, next_try_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)", (cid, event, recipient, json.dumps(payload, default=str), status, error, now(), by, now()))
+        if cid:
+            _event(con, cid, by, f"message.{status}", {"id": cur.lastrowid, "event": event, "to": recipient, "error": error})
+        return cur.lastrowid
+
+
+def claim_due_messages(limit: int = 20) -> list[dict]:
+    """Messages ready to send, marked 'sending' so two senders never post the same one."""
+    with connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        rows = [dict(r) for r in con.execute(
+            "SELECT * FROM outbox WHERE status IN ('queued','failed') AND attempts < 5 AND next_try_at <= ? "
+            "ORDER BY id LIMIT ?", (now(), limit))]
+        for r in rows:
+            con.execute("UPDATE outbox SET status='sending' WHERE id = ?", (r["id"],))
+    for r in rows:
+        r["payload"] = json.loads(r["payload"])
+    return rows
+
+
+def message_result(mid: int, ok: bool, error: str | None, next_try_at: str | None, redacted: dict | None) -> None:
+    with connect() as con:
+        if ok:
+            con.execute("UPDATE outbox SET status='sent', attempts=attempts+1, last_error=NULL, sent_at=?, payload=? WHERE id=?",
+                        (now(), json.dumps(redacted, default=str), mid))
+        else:
+            con.execute("UPDATE outbox SET status='failed', attempts=attempts+1, last_error=?, next_try_at=? WHERE id=?",
+                        ((error or "")[:500], next_try_at, mid))
+
+
+def messages(cid: int) -> list[dict]:
+    with connect() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT id, event, channel, recipient, status, attempts, last_error, created_at, created_by, sent_at "
+            "FROM outbox WHERE cycle_id = ? ORDER BY id DESC LIMIT 100", (cid,))]
+    return rows
+
+
+def get_message(mid: int) -> dict | None:
+    with connect() as con:
+        r = _d(con.execute("SELECT * FROM outbox WHERE id = ?", (mid,)).fetchone())
+    if r:
+        r["payload"] = json.loads(r["payload"])
+    return r
+
+
+def reset_sending() -> None:
+    """After a restart, messages caught mid-send go back to the queue."""
+    with connect() as con:
+        con.execute("UPDATE outbox SET status='queued' WHERE status='sending'")
+
+
+def requeue_message(mid: int) -> None:
+    with connect() as con:
+        con.execute("UPDATE outbox SET status='queued', attempts=0, next_try_at=? WHERE id=?", (now(), mid))
+
+
+def revoke_active_links(cid: int, by: str) -> int:
+    with connect() as con:
+        cur = con.execute("UPDATE principal_links SET revoked_at = ?, revoked_by = ? WHERE cycle_id = ? AND revoked_at IS NULL",
+                          (now(), by, cid))
+        return cur.rowcount
 
 
 def mark_prepared(cid: int, summary: dict, by: str) -> None:

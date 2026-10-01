@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from .. import appdb
 from ..engine import EngineError
-from ..nego import demo, portal, service, store
+from ..nego import demo, notify, portal, service, store
 from .admin import _form_file
 from .app import fail, ok
 
@@ -197,7 +197,8 @@ async def cycle_scan(request: Request) -> Response:
 @handler
 async def cycle_step(request: Request) -> Response:
     body = await _json(request)
-    c = service.set_step(_cid(request), str(body.get("step", "")), _who(request), str(body.get("note", "")))
+    c = service.set_step(_cid(request), str(body.get("step", "")), _who(request), str(body.get("note", "")),
+                         send_link=bool(body.get("send_link", False)))
     return ok(c)
 
 
@@ -243,6 +244,38 @@ async def link_revoke(request: Request) -> Response:
     return ok({"links": store.links(cid)})
 
 
+@handler
+async def link_send(request: Request) -> Response:
+    cid = _cid(request)
+    res = notify.step_opened(cid, _who(request))
+    appdb.audit(_who(request), "principal.link.send", {"cycle": cid, "status": res["status"]})
+    return ok(res)
+
+
+@handler
+async def message_list(request: Request) -> Response:
+    cid = _cid(request)
+    store.require_cycle(cid)
+    return ok({"messages": store.messages(cid), "automation": notify.status()})
+
+
+@handler
+async def message_retry(request: Request) -> Response:
+    return ok(notify.retry(_cid(request), int(request.path_params["mid"])))
+
+
+@handler
+async def notify_status(_: Request) -> Response:
+    return ok(notify.status())
+
+
+@handler
+async def notify_test(request: Request) -> Response:
+    res = notify.send_test(_who(request))
+    appdb.audit(_who(request), "notify.test", res)
+    return ok(res)
+
+
 def routes() -> list[Route]:
     return [
         Route("/api/nego/principals", principals),
@@ -265,6 +298,11 @@ def routes() -> list[Route]:
         Route("/api/admin/nego/cycles/{cid}/items/{iid:int}", item_update, methods=["PATCH"]),
         Route("/api/admin/nego/cycles/{cid}/anomalies/{aid:int}", anomaly_decide, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/links", link_list),
+        Route("/api/admin/nego/cycles/{cid}/links/send", link_send, methods=["POST"]),
+        Route("/api/admin/nego/cycles/{cid}/messages", message_list),
+        Route("/api/admin/nego/cycles/{cid}/messages/{mid:int}/retry", message_retry, methods=["POST"]),
+        Route("/api/admin/nego/notify", notify_status),
+        Route("/api/admin/nego/notify/test", notify_test, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/links", link_create, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/links/{lid:int}/revoke", link_revoke, methods=["POST"]),
     ]

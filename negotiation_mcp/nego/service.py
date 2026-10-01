@@ -230,9 +230,15 @@ def import_template(cid: int, content: bytes, by: str, apply: bool, fields: tupl
     return plan
 
 
-def set_step(cid: int, step: str, by: str, note: str = "") -> dict:
+def set_step(cid: int, step: str, by: str, note: str = "", send_link: bool = False) -> dict:
+    """Move to a step. With ``send_link``, a principal step also sends the principal their
+    link through the automation webhook (see notify.py)."""
     c = store.set_step(cid, step, by, note)
     scan(cid)  # some rules depend on the step (e.g. missing RFQ prices)
+    if send_link and step in M.PRINCIPAL_STEP_FIELDS:
+        from . import notify
+
+        c["message"] = notify.step_opened(cid, by)
     return c
 
 

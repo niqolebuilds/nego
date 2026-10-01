@@ -386,8 +386,15 @@ What a principal can reach is enforced on the server (`nego/portal.py`):
 Links can be revoked, and only their SHA-256 hash is stored.
 
 **Who can do what.** Everyone signed in can see the negotiations. Only admins can add principals,
-open and prepare negotiations, edit items, decide findings, import, and move steps. Automatic WhatsApp
-and email reminders come later; for now the admin shares the link.
+open and prepare negotiations, edit items, decide findings, import, and move steps. **Sending the link automatically.** When an admin moves a negotiation to a principal step, the
+app can send the principal a fresh link by email and WhatsApp.
+- **How:** it posts one event to a **Power Automate** flow. The flow sends the Outlook email and
+  a Meta-approved **WhatsApp Cloud API** template.
+- **Reliability:** messages go through an outbox with retries. Admins see each one's status and
+  can retry.
+- **Setup:** set `NEGO_PUBLIC_URL` and `NEGO_NOTIFY_WEBHOOK_URL` on the server. The step-by-step
+  guide, the JSON schema and the template text are in `deploy/POWER_AUTOMATE.md`.
+- **Without it:** an admin copies the link from **Principal link**.
 
 **Try it.** As an admin, open **Negotiations** and choose **Load sample principals**. That loads
 6 fictional principals and opens 3 negotiations. One of them already has an RFQ filled the way
@@ -425,7 +432,8 @@ negotiation_mcp/
   nlu.py            offline parser for the chat bar
   nego/             principal negotiation cycles: model (steps, template columns, formula), uom,
                     store (nego.db), prepare, template_io, anomalies, impact, service, demo,
-                    checks (principal-side checks, ID/EN), portal (links, allowlists, send)
+                    checks (principal-side checks, ID/EN), portal (links, allowlists, send),
+                    notify (outbox + webhook to Power Automate)
   templates/        Template_Nego.xlsx (the exact workbook used for export)
   dashboard/        Starlette app: auth.py, admin.py, nego_routes.py, portal_routes.py, app.py;
                     static/ shell, chat, nego, renewals, admin, principal (the portal)
@@ -437,7 +445,7 @@ data/
   sample/           synthetic price book (marked SAMPLE_DATA)
   templates/        header-only CSVs describing the export
 deploy/
-  docker-compose.yml, SUPERSET.md
+  docker-compose.yml, SUPERSET.md, POWER_AUTOMATE.md
 tests/
   test_engine.py        33 tests including workbook parity
   test_pricebook.py     loading, validation, UoM, index
@@ -446,6 +454,7 @@ tests/
   test_dashboard.py     API parity, JSON safety, read-only
   test_nego.py          UOM, template formula, anomaly rules, prepare, Template_Nego round trip, roles
   test_portal.py        principal checks, field/response allowlists, links, sending, locked Excel
+  test_notify.py        automatic link sending through a stub webhook: payload, signature, retry, redaction
   smoke_mcp.py          end-to-end client over stdio
 evaluation.xml      16 evaluation questions
 ```

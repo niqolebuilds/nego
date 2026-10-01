@@ -416,6 +416,9 @@ def create_app(breakage: float | None = None) -> Starlette:
     STATE["breakage"] = breakage
     appdb.init()
     nego_store.init()
+    from ..nego import notify
+
+    notify.start_sender()
     return Starlette(
         middleware=[Middleware(auth.AuthMiddleware)],
         routes=[

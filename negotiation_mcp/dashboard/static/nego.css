@@ -139,3 +139,14 @@ table.items td.flags { display: flex; gap: 4px; align-items: center; }
 .sent-pill { align-self: flex-start; background: var(--positive-bg); color: var(--positive-ink); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; }
 .reason-note { background: var(--surface-breeze); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
 #link-url { width: 100%; box-sizing: border-box; min-width: 0; font-family: ui-monospace, monospace; font-size: 12.5px; }
+.big-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; margin: 10px 0 4px; cursor: pointer; }
+.big-check input { width: 20px; height: 20px; margin-top: 2px; }
+.block { display: block; }
+.msgs { margin-bottom: 14px; }
+.msg-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.msg-head h3 { margin: 0 auto 0 0; text-transform: none; letter-spacing: 0; color: var(--text-primary); font-size: 15px; }
+.msg-table { width: 100%; font-size: 13px; }
+.msg-table td, .msg-table th { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; }
+.mstat { font-weight: 700; }
+.mstat.s-sent { color: var(--good); } .mstat.s-failed { color: var(--critical); } .mstat.s-skipped { color: var(--warning); } .mstat.s-queued, .mstat.s-sending { color: var(--text-secondary); }
+.act-title { margin: 6px 0 8px; }
