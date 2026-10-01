@@ -1,4 +1,4 @@
-"""Indonesian number display: Rp 9.905, Rp 5,36 M, 10,6%.
+"""Indonesian number display: Rp 9.905, Rp 5,36 Bn, 10,6%.
 
 Display only. Calculations, JSON, CSV and the warehouse keep raw numbers. Standard
 library only, so the calculation kernel can use it and stay dependency-free.
@@ -8,8 +8,8 @@ Conventions
 * Dot groups thousands, comma marks decimals: ``Rp 107.157.799``.
 * Whole rupiah, except amounts under Rp 100, which keep two decimals (``Rp 7,65``) so
   cheap per-unit prices do not lose the differences that matter.
-* Compact scale words: ``rb`` (ribu, 10^3), ``jt`` (juta, 10^6), ``M`` (miliar, 10^9),
-  ``T`` (triliun, 10^12).
+* Compact scale words, standardised to English abbreviations: ``K`` (thousand, ribu),
+  ``Mn`` (million, juta), ``Bn`` (billion, miliar), ``Tn`` (trillion, triliun).
 * Any currency other than IDR falls back to the international style: ``USD 1,234.56``.
 """
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 DASH = "—"
 SMALL_AMOUNT = 100.0
-SCALES = ((1e12, "T", 2), (1e9, "M", 2), (1e6, "jt", 1), (1e3, "rb", 1))
+SCALES = ((1e12, "Tn", 2), (1e9, "Bn", 2), (1e6, "Mn", 1), (1e3, "K", 1))
 
 
 def num(value: float, decimals: int = 0) -> str:
@@ -43,7 +43,7 @@ def rp(value: float | None, currency: str | None = "IDR", decimals: int | None =
 
 
 def compact(value: float | None) -> str:
-    """Compact number with an Indonesian scale word: 5.36e9 -> '5,36 M'."""
+    """Compact number with a scale word: 5.36e9 -> '5,36 Bn'."""
     if value is None:
         return DASH
     a = abs(value)
@@ -54,7 +54,7 @@ def compact(value: float | None) -> str:
 
 
 def rp_compact(value: float | None, currency: str | None = "IDR") -> str:
-    """Compact money: 5.36e9 -> 'Rp 5,36 M'."""
+    """Compact money: 5.36e9 -> 'Rp 5,36 Bn'."""
     if value is None:
         return DASH
     if not _is_idr(currency):

@@ -7,6 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%230c21a4%22/%3E%3Cpath d=%22M3 11l3-3 2 2 5-5%22 stroke=%22%23d4d67d%22 stroke-width=%221.8%22 fill=%22none%22/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/chat.css">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="app">
 <header class="bar">
@@ -14,12 +15,21 @@
     <span class="mark" aria-hidden="true"></span>
     <span>Negotiation Intelligence</span>
   </a>
-  <span class="asof" id="asof"></span>
+  <nav class="apptabs" id="apptabs" aria-label="Sections" hidden>
+    <a href="#chat" data-page="chat">Assistant</a>
+    <a href="#renewals" data-page="renewals">Renewals</a>
+    <a href="#admin" data-page="admin" id="admin-tab" hidden>Admin</a>
+  </nav>
+  <div class="who" id="who" hidden>
+    <span class="avatar-sm" id="who-initials" aria-hidden="true"></span>
+    <span class="who-text"><b id="who-name"></b><span class="role" id="who-role"></span></span>
+    <button type="button" class="signout" id="signout">Sign out</button>
+  </div>
 </header>
 <div id="banner" class="banner" hidden></div>
 
 <!-- Page 1: how to use it -->
-<main id="welcome" class="welcome">
+<main id="welcome" class="welcome page-v">
   <section class="hero">
     <p class="eyebrow">For Siloam procurement</p>
     <h1>Walk into every negotiation knowing the best price you can get.</h1>
@@ -35,8 +45,8 @@
     <ol class="steps">
       <li>
         <span class="n">1</span>
-        <h3>Say what you need</h3>
-        <p>Ask about one product and one vendor, or open the renewal calendar to see which contracts end in the next 30–90 days.</p>
+        <h3>Sign in and ask</h3>
+        <p>Type a question like "best price for ceftriaxone from Medisindo", or use the buttons: one product and vendor, or the renewal calendar.</p>
       </li>
       <li>
         <span class="n">2</span>
@@ -45,8 +55,8 @@
       </li>
       <li>
         <span class="n">3</span>
-        <h3>Negotiate or look deeper</h3>
-        <p><b>Negotiate</b> gives you a plan: your opening line, what to trade if they push back, and your leverage. <b>See details</b> shows the evidence.</p>
+        <h3>Negotiate and track it</h3>
+        <p><b>Negotiate</b> gives you a plan. Log the vendor's offers and move each renewal along the board until it's agreed, and watch the savings add up.</p>
       </li>
     </ol>
   </section>
@@ -54,26 +64,111 @@
   <section class="notes" aria-labelledby="notes-title">
     <h2 id="notes-title">Good to know</h2>
     <ul>
+      <li><b>Everyone can see everything and update renewal progress.</b> Admins also upload price lists, records and documents, and tune the engine.</li>
       <li><b>Prices are per clinical unit</b> (one test, one piece, one vial) and also shown in the vendor's pack, so a box of 50 is never compared with a single.</li>
       <li><b>The walk-away price is only a proposal.</b> It needs sign-off from someone other than the negotiator before the engine will say accept, push or walk.</li>
-      <li><b>Amounts are in rupiah</b>: Rp 9.905 per unit, Rp 5,36 M a year (jt = juta, M = miliar).</li>
+      <li><b>Amounts are in rupiah</b>: Rp 9.905 per unit, Rp 539,6 Mn or Rp 5,36 Bn a year (Mn = million / juta, Bn = billion / miliar).</li>
     </ul>
   </section>
 </main>
 
-<!-- Page 2: the conversation -->
-<main id="chat" class="chat" hidden>
-  <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversation"></div>
-  <nav class="dock" id="dock" aria-label="Quick actions" hidden>
-    <button type="button" data-go="ask">Ask me anything</button>
-    <button type="button" data-go="calendar">Renewal calendar</button>
-    <button type="button" data-go="restart" class="quiet">Start over</button>
-    <a class="quiet" href="/analytics">Full analytics</a>
-  </nav>
+<!-- Sign in -->
+<main id="signin" class="signin page-v" hidden>
+  <form class="signin-card" id="signin-form" novalidate>
+    <span class="mark lg" aria-hidden="true"></span>
+    <h1>Sign in</h1>
+    <p class="muted">Only registered users can use Negotiation Intelligence. Ask an admin to invite you.</p>
+    <label>Work email
+      <input type="email" id="signin-email" autocomplete="username" placeholder="name@siloamhospitals.com" required>
+    </label>
+    <label>Password
+      <input type="password" id="signin-password" autocomplete="current-password" placeholder="Coming soon" disabled>
+    </label>
+    <p class="notice" id="signin-notice"></p>
+    <p class="error" id="signin-error" role="alert" hidden></p>
+    <button type="submit" class="cta wide">Sign in</button>
+  </form>
 </main>
 
+<!-- Assistant -->
+<main id="chat" class="chat page-v" hidden>
+  <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversation"></div>
+  <div class="composer-wrap">
+    <nav class="dock" id="dock" aria-label="Quick actions">
+      <button type="button" data-go="ask">Ask me anything</button>
+      <button type="button" data-go="calendar">Renewal calendar</button>
+      <button type="button" data-go="risks">Risk alerts</button>
+      <button type="button" data-go="savings">Where to save</button>
+      <a class="quiet" href="/analytics">See analytics</a>
+      <button type="button" data-go="restart" class="quiet">Start over</button>
+    </nav>
+    <form class="composer" id="composer" autocomplete="off">
+      <label class="sr-only" for="composer-input">Ask the assistant</label>
+      <input id="composer-input" maxlength="500" placeholder='Ask anything, e.g. "best price for ceftriaxone from Medisindo"'>
+      <button type="submit" class="send" aria-label="Send">
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 10l14-7-5 14-2-6-7-1z" fill="currentColor"/></svg>
+      </button>
+    </form>
+  </div>
+</main>
+
+<!-- Renewals board -->
+<main id="renewals" class="board-page page-v" hidden>
+  <div class="page-head">
+    <div>
+      <h1>Renewals</h1>
+      <p class="muted">Move each contract along as the negotiation progresses. Everyone can update progress; drag a card or open it.</p>
+    </div>
+  </div>
+  <div class="kpis5" id="board-kpis"></div>
+  <div class="filters board-filters">
+    <label>Ending within
+      <select id="f-window">
+        <option value="0-30">Next 30 days</option>
+        <option value="0-90" selected>Next 90 days</option>
+        <option value="0-180">Next 180 days</option>
+        <option value="0-730">Next 2 years</option>
+      </select>
+    </label>
+    <label>Hospital <select id="f-hospital"><option value="">All hospitals</option></select></label>
+    <label>Vendor <select id="f-vendor"><option value="">All vendors</option></select></label>
+    <label>Search <input id="f-search" placeholder="Product or vendor"></label>
+    <label class="check"><input type="checkbox" id="f-mine"> Only mine</label>
+  </div>
+  <div class="board" id="board" aria-label="Renewal board"></div>
+</main>
+
+<!-- Admin -->
+<main id="admin" class="admin-page page-v" hidden>
+  <div class="page-head">
+    <div>
+      <h1>Admin</h1>
+      <p class="muted">Upload data and documents, tune the engine, and manage who can sign in. Every change is logged.</p>
+    </div>
+  </div>
+  <nav class="subtabs" id="admin-subtabs" aria-label="Admin sections">
+    <a href="#admin/data" data-sub="data">Price data</a>
+    <a href="#admin/documents" data-sub="documents">Documents</a>
+    <a href="#admin/settings" data-sub="settings">Engine settings</a>
+    <a href="#admin/users" data-sub="users">Users</a>
+    <a href="#admin/activity" data-sub="activity">Activity</a>
+  </nav>
+  <div id="admin-body"></div>
+</main>
+
+<!-- Renewal detail drawer -->
+<div class="drawer-scrim" id="drawer-scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <button type="button" class="drawer-close" id="drawer-close" aria-label="Close">×</button>
+  <div id="drawer-body"></div>
+</aside>
+
+<div id="toast" class="toast" role="status" hidden></div>
 <div id="tooltip" class="tooltip" role="status" hidden></div>
 <script src="/static/common.js"></script>
+<script src="/static/renewals.js"></script>
+<script src="/static/admin.js"></script>
 <script src="/static/chat.js"></script>
+<script src="/static/shell.js"></script>
 </body>
 </html>

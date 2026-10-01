@@ -2,3 +2,4 @@ mcp>=1.2.0,<2
 pydantic>=2.0
 starlette
 uvicorn
+openpyxl>=3.1

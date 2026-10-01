@@ -31,7 +31,7 @@ const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyV
 const isIDR = () => (state.currency || "IDR").toUpperCase() === "IDR";
 const nf = (d) => new Intl.NumberFormat(isIDR() ? "id-ID" : "en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = (v, d = 0) => (v == null ? "—" : nf(d).format(v));
-const SCALES = [[1e12, "T", 2], [1e9, "M", 2], [1e6, "jt", 1], [1e3, "rb", 1]];
+const SCALES = [[1e12, "Tn", 2], [1e9, "Bn", 2], [1e6, "Mn", 1], [1e3, "K", 1]];
 function compact(v) {
   if (v == null) return "—";
   for (const [size, word, d] of SCALES) if (Math.abs(v) >= size) return `${num(v / size, d)} ${word}`;
@@ -41,12 +41,25 @@ const prefix = (v, body) => `${v < 0 ? "-" : ""}${isIDR() ? "Rp" : state.currenc
 const money = (v) => (v == null ? "—" : prefix(v, compact(Math.abs(v))));
 const unit = (v) => (v == null ? "—" : prefix(v, num(Math.abs(v), Math.abs(v) < 100 && v !== Math.trunc(v) ? 2 : 0)));
 const pct = (v, d = 1) => (v == null ? "—" : `${num(v * 100, d)}%`);
-async function api(path) {
-  const r = await fetch(path);
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error || r.statusText);
+// All requests carry the app header (the server refuses writes without it) and send the
+// user back to sign-in when the session has ended.
+async function request(path, { method = "GET", body, form } = {}) {
+  const opts = { method, headers: { "X-Requested-With": "nego" }, credentials: "same-origin" };
+  if (form) opts.body = form;
+  else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(path, opts);
+  let j = null;
+  try { j = await r.json(); } catch (_) { j = {}; }
+  if (r.status === 401 && !path.startsWith("/api/auth/")) {
+    window.dispatchEvent(new CustomEvent("nego:signed-out"));
+    if (location.pathname !== "/") location.href = "/#signin";
+  }
+  if (!r.ok) throw new Error((j && j.error) || r.statusText);
   return j;
 }
+const api = (path) => request(path);
+const send = (path, method, body) => request(path, { method, body });
+const upload = (path, form) => request(path, { method: "POST", form });
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
 function colorFor(name, i) {
   // Colour follows the entity, not its rank: a name keeps its slot once assigned.

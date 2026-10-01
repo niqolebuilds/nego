@@ -174,7 +174,8 @@ async function route() {
 }
 
 async function init() {
-  const st = await api("/api/status");
+  let st;
+  try { st = await api("/api/status"); } catch (_) { return; } // signed out: request() has sent us to sign-in
   state.currency = st.currency || "IDR";
   $("asof").textContent = `data to ${st.date_to} · ${num(st.rows)} price rows · ${st.skus} SKUs · ${st.vendors} vendors · ${st.hospitals} sites`;
   if (st.banner) { $("banner").textContent = st.banner; $("banner").hidden = false; }
