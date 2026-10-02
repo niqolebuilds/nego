@@ -94,3 +94,62 @@ def test_last_admin_cannot_be_removed(app):
     me = admin.get("/api/auth/me").json()["user"]
     r = admin.patch(f"/api/admin/users/{me['id']}", json={"role": "viewer"}, headers=H)
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------- passwords
+
+@pytest.fixture
+def password_mode(monkeypatch):
+    monkeypatch.setattr(auth, "PROVIDER", auth.PasswordSignIn())
+    auth._fails.clear()
+    yield
+    auth._fails.clear()
+
+
+def test_password_hash_round_trip():
+    h = appdb.hash_password("correct horse battery")
+    assert h.startswith("scrypt$") and "correct" not in h
+    assert appdb.verify_password("correct horse battery", h)
+    assert not appdb.verify_password("wrong horse battery", h)
+    assert not appdb.verify_password("anything", None)
+
+
+def test_setup_link_sets_password_and_signs_in(app, password_mode):
+    admin = client_as(app, None)
+    admin_user = appdb.user_by_email("admin@example.com")
+    appdb.set_password(admin_user["id"], "admin-password-1", "test")
+    assert admin.post("/api/auth/signin", json={"email": "admin@example.com", "password": "admin-password-1"}, headers=H).status_code == 200
+
+    r = admin.post("/api/admin/users", json={"email": "pat@example.com", "name": "Pat", "role": "viewer"}, headers=H)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "password_hash" not in body and "setup_token" not in body and not body["has_password"]
+    token = body["setup_link"].rsplit("#setpw/", 1)[1]
+    assert all("password_hash" not in u for u in admin.get("/api/admin/users").json()["users"])
+
+    pat = TestClient(app)
+    assert pat.post("/api/auth/signin", json={"email": "pat@example.com", "password": ""}, headers=H).status_code == 401
+    assert pat.get(f"/api/auth/setup?token={token}").json()["email"] == "pat@example.com"
+    assert pat.post("/api/auth/setup", json={"token": token, "password": "short"}, headers=H).status_code == 400
+    r = pat.post("/api/auth/setup", json={"token": token, "password": "pat-password-1"}, headers=H)
+    assert r.status_code == 200 and r.json()["user"]["email"] == "pat@example.com"
+    assert pat.get("/api/catalog").status_code == 200
+    # The link works once.
+    assert pat.post("/api/auth/setup", json={"token": token, "password": "another-pass-1"}, headers=H).status_code == 404
+
+    fresh = TestClient(app)
+    assert fresh.post("/api/auth/signin", json={"email": "pat@example.com", "password": "wrong-password"}, headers=H).status_code == 401
+    assert fresh.post("/api/auth/signin", json={"email": "pat@example.com", "password": "pat-password-1"}, headers=H).status_code == 200
+
+
+def test_reset_link_needs_admin(app, password_mode):
+    viewer = client_as(app, None)
+    uid = appdb.user_by_email("viewer@example.com")["id"]
+    assert viewer.post(f"/api/admin/users/{uid}/setup-link", headers=H).status_code == 401
+
+
+def test_repeated_failures_are_slowed_down(app, password_mode):
+    c = TestClient(app)
+    codes = [c.post("/api/auth/signin", json={"email": "admin@example.com", "password": "nope-nope-nope"}, headers=H).status_code
+             for _ in range(auth.FAIL_LIMIT + 1)]
+    assert codes[:auth.FAIL_LIMIT] == [401] * auth.FAIL_LIMIT and codes[-1] == 429

@@ -16,6 +16,7 @@ x-app: &app
     # Set these in an .env file next to this compose file (never commit it). See GO_LIVE.md.
     NEGO_SECRET: ${NEGO_SECRET:-}
     NEGO_ADMIN_EMAIL: ${NEGO_ADMIN_EMAIL:-admin@example.com}
+    NEGO_ADMIN_PASSWORD: ${NEGO_ADMIN_PASSWORD:-}
     NEGO_DOC_KEY: ${NEGO_DOC_KEY:-}
     NEGO_PUBLIC_URL: ${NEGO_PUBLIC_URL:-}
     NEGO_NOTIFY_WEBHOOK_URL: ${NEGO_NOTIFY_WEBHOOK_URL:-}

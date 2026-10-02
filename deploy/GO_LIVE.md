@@ -3,15 +3,20 @@
 What has to be true before Siloam staff and principals use the app with real prices.
 Items marked **Blocker** must be done first.
 
-## 1. Sign-in: Blocker
-- **Today** the Siloam side uses a development sign-in. Any *registered* email gets in **without a
-  password** (`dashboard/auth.py`, `DevSignIn`).
-- **Before go-live**, replace it with Microsoft Entra ID (SSO) or passwords:
-  - write a provider with the same `authenticate()` method and set `PROVIDER`;
-  - nothing else changes, because roles, sessions and audit are already enforced on every
-    request.
-- **Principals** don't use this sign-in. They use per-negotiation links, which are hashed,
-  expire and can be revoked, and too many bad links from one address get blocked.
+## 1. Sign-in
+- **Siloam staff** sign in with email + password (`dashboard/auth.py`, `PasswordSignIn`).
+  Passwords are scrypt-hashed in `app.db`; nobody, admins included, can read them.
+  - **First admin:** set `NEGO_ADMIN_EMAIL`, and either `NEGO_ADMIN_PASSWORD` (first start only),
+    or leave it empty and open the one-time link the server prints in its log on first start.
+  - **Everyone else:** Admin → Users → Invite. The app shows a one-time link (valid 7 days); send
+    it to the person and they choose their own password. **Reset link** on the same row makes a
+    new one if someone forgets theirs.
+  - Eight failed sign-ins from one address within 15 minutes are blocked for a while.
+  - `NEGO_AUTH=dev` switches back to email-only sign-in. Use it only for local demos and tests.
+  - Microsoft Entra ID (SSO) can be added later as another provider with the same `authenticate()`.
+- **Principals (vendors)** don't have accounts. Each negotiation step sends them a private link
+  (email/WhatsApp). Links are hashed, expire, can be revoked, and too many bad links from one
+  address get blocked.
 
 ## 2. Hosting
 - **HTTPS:** run behind a reverse proxy (IIS, nginx, Azure App Gateway). The app sends HSTS
@@ -34,6 +39,7 @@ Items marked **Blocker** must be done first.
 | `NEGO_HOME` | everything | Workspace folder (databases, documents). |
 | `NEGO_SECRET` | sessions | A long random string. Without it, a key file in the workspace is used. |
 | `NEGO_ADMIN_EMAIL` | first start | The first admin account. Invite everyone else from Admin → Users. |
+| `NEGO_ADMIN_PASSWORD` | optional | First admin's password on first start. Without it, use the link printed in the log. |
 | `NEGO_DOC_KEY` | documents | Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `NEGO_PUBLIC_URL` | principal links | e.g. `https://nego.siloamhospitals.com` |
 | `NEGO_NOTIFY_WEBHOOK_URL` | automatic sending | The Power Automate trigger URL (see `POWER_AUTOMATE.md`). |

@@ -84,12 +84,29 @@
     <label>Work email
       <input type="email" id="signin-email" autocomplete="username" placeholder="name@siloamhospitals.com" required>
     </label>
-    <label>Password
-      <input type="password" id="signin-password" autocomplete="current-password" placeholder="Coming soon" disabled>
+    <label id="signin-password-row">Password
+      <input type="password" id="signin-password" autocomplete="current-password">
     </label>
     <p class="notice" id="signin-notice"></p>
     <p class="error" id="signin-error" role="alert" hidden></p>
     <button type="submit" class="cta wide">Sign in</button>
+  </form>
+</main>
+
+<!-- Set password (from a one-time link an admin sends) -->
+<main id="setpw" class="signin page-v" hidden>
+  <form class="signin-card" id="setpw-form" novalidate>
+    <span class="mark lg" aria-hidden="true"></span>
+    <h1>Set your password</h1>
+    <p class="muted" id="setpw-who">Checking your link…</p>
+    <label>New password
+      <input type="password" id="setpw-password" autocomplete="new-password" minlength="10">
+    </label>
+    <label>Type it again
+      <input type="password" id="setpw-confirm" autocomplete="new-password" minlength="10">
+    </label>
+    <p class="error" id="setpw-error" role="alert" hidden></p>
+    <button type="submit" class="cta wide" id="setpw-submit">Set password and sign in</button>
   </form>
 </main>
 
@@ -123,25 +140,25 @@
   <div class="page-head">
     <div>
       <h1>Renewals</h1>
-      <p class="muted">Move each contract along as the negotiation progresses. Everyone can update progress; drag a card or open it.</p>
+      <p class="muted">One card per principal MOU. A card moves on its own as its negotiation moves through the steps in Negotiations. Open a card for the MOU, the current step and the engine's price targets.</p>
     </div>
   </div>
   <div class="kpis5" id="board-kpis"></div>
   <div class="filters board-filters">
-    <label>Ending within
+    <label>MOU ends within
       <select id="f-window">
-        <option value="0-30">Next 30 days</option>
-        <option value="0-90" selected>Next 90 days</option>
-        <option value="0-180">Next 180 days</option>
-        <option value="0-730">Next 2 years</option>
+        <option value="90">Next 3 months</option>
+        <option value="183">Next 6 months</option>
+        <option value="365" selected>Next 12 months</option>
+        <option value="730">Next 2 years</option>
+        <option value="">All MOUs</option>
       </select>
     </label>
-    <label>Hospital <select id="f-hospital"><option value="">All hospitals</option></select></label>
-    <label>Vendor <select id="f-vendor"><option value="">All vendors</option></select></label>
-    <label>Search <input id="f-search" placeholder="Product or vendor"></label>
-    <label class="check"><input type="checkbox" id="f-mine"> Only mine</label>
+    <label>Category <select id="f-category"><option value="">All categories</option></select></label>
+    <label>Search <input id="f-search" placeholder="Principal, distributor or contact"></label>
+    <label class="check"><input type="checkbox" id="f-mine"> Only negotiations I started</label>
   </div>
-  <div class="board" id="board" aria-label="Renewal board"></div>
+  <div class="board" id="board" aria-label="MOU renewal board"></div>
 </main>
 
 <!-- Admin -->

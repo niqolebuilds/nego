@@ -78,3 +78,36 @@ def test_bad_updates_are_refused(viewer):
 def test_assess_offer_zones():
     a = lambda p: I.assess_offer(p, target_price=100, fallback_price=102, walk_away=120, opening_ask=95)["zone"]  # noqa: E731
     assert [a(90), a(99), a(101), a(110), a(130)] == ["below_stretch", "at_target", "near_target", "push", "walk"]
+
+
+def test_mou_board_is_one_card_per_principal_with_stage_from_negotiation():
+    from datetime import date
+
+    from negotiation_mcp.nego import service, store
+
+    a = store.create_principal({"name": "PT Board Alpha", "mou_end": "2027-01-31"}, "t")
+    b = store.create_principal({"name": "PT Board Beta", "mou_end": "2026-12-31"}, "t")
+    store.create_cycle(b["id"], {"contract_start": "2027-01-01", "contract_end": "2029-12-31"}, "t")
+    d = service.mou_board(None, today=date(2026, 10, 2))
+    cards = {m["name"]: m for m in d["mous"]}
+    assert cards["PT Board Alpha"]["stage"] == "not_started"
+    assert cards["PT Board Beta"]["stage"] == "preparing"
+    assert [s["key"] for s in d["stages"]] == ["not_started", "preparing", "with_principal", "negotiating", "renewed"]
+    # Window: Alpha ends in 121 days, Beta in 90.
+    names = {m["name"] for m in service.mou_board(100, today=date(2026, 10, 2))["mous"]}
+    assert "PT Board Beta" in names and "PT Board Alpha" not in names
+    assert service.mou_stage({"cycle": {"status": "closed", "contract_end": "2029-12-31"}, "mou_end": "2026-12-31"}) == "renewed"
+    assert a["id"] != b["id"]
+
+
+def test_mou_board_links_price_book_skus_by_vendor_name(viewer):
+    from negotiation_mcp.nego import store
+
+    vendor = first_renewal(viewer)["vendor"]
+    # Legal form and word order are ignored: "PT <words reversed>" still matches.
+    name = "PT " + " ".join(reversed(vendor.split()))
+    store.create_principal({"name": name, "mou_end": "2026-12-31"}, "t")
+    d = viewer.get("/api/nego/mou-board").json()
+    card = next(m for m in d["mous"] if m["name"] == name)
+    assert card["price_targets"]["skus"] >= 1
+    assert all(i["vendor"] == vendor for i in card["price_targets"]["items"])

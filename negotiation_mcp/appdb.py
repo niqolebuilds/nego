@@ -7,6 +7,9 @@ anything a person typed. Every write that matters also lands in ``audit_log``.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -30,6 +33,8 @@ STAGES = (
 )
 STAGE_KEYS = tuple(k for k, _ in STAGES)
 SESSION_HOURS = 12
+SETUP_LINK_DAYS = 7
+MIN_PASSWORD = 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -96,16 +101,34 @@ def _create(path) -> None:
         con.close()
 
 
-def init() -> None:
-    """Create tables, and the first admin if there are no users yet. Safe to call again."""
+# Columns added after the first release; added in place so existing app.db files keep working.
+USER_COLUMNS = {"password_hash": "TEXT", "setup_token": "TEXT", "setup_expires": "TEXT"}
+
+
+def init() -> str | None:
+    """Create tables, and the first admin if there are no users yet. Safe to call again.
+
+    Returns a one-time password-setup token for the first admin when one was just created
+    and ``NEGO_ADMIN_PASSWORD`` wasn't given, so the caller can print the link.
+    """
     with connect() as con:
         con.executescript(SCHEMA)
-        if not con.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-            email = (os.environ.get("NEGO_ADMIN_EMAIL") or "admin@example.com").strip().lower()
-            con.execute(
-                "INSERT INTO users (email, name, role, created_at, created_by) VALUES (?,?,?,?,?)",
-                (email, os.environ.get("NEGO_ADMIN_NAME") or "Administrator", "admin", now(), "system"),
-            )
+        have = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+        for col, kind in USER_COLUMNS.items():
+            if col not in have:
+                con.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
+        if con.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            return None
+        email = (os.environ.get("NEGO_ADMIN_EMAIL") or "admin@example.com").strip().lower()
+        con.execute(
+            "INSERT INTO users (email, name, role, created_at, created_by) VALUES (?,?,?,?,?)",
+            (email, os.environ.get("NEGO_ADMIN_NAME") or "Administrator", "admin", now(), "system"),
+        )
+    first = user_by_email(email)
+    if os.environ.get("NEGO_ADMIN_PASSWORD"):
+        set_password(first["id"], os.environ["NEGO_ADMIN_PASSWORD"], "system")
+        return None
+    return issue_setup_token(first["id"], "system")
 
 
 def _row(r: sqlite3.Row | None) -> dict | None:
@@ -140,9 +163,20 @@ def _clean_email(email: str) -> str:
     return e
 
 
+PRIVATE_USER_FIELDS = ("password_hash", "setup_token", "setup_expires")
+
+
 def list_users() -> list[dict]:
     with connect() as con:
-        return [dict(r) for r in con.execute("SELECT * FROM users ORDER BY role DESC, name")]
+        rows = [dict(r) for r in con.execute("SELECT * FROM users ORDER BY role DESC, name")]
+    return [safe_user(r) for r in rows]
+
+
+def safe_user(u: dict) -> dict:
+    """A user row without password or setup-link hashes, for the admin screens."""
+    out = {k: v for k, v in u.items() if k not in PRIVATE_USER_FIELDS}
+    out["has_password"] = bool(u.get("password_hash"))
+    return out
 
 
 def get_user(user_id: int) -> dict | None:
@@ -198,6 +232,82 @@ def update_user(user_id: int, by: str, role: str | None = None, active: bool | N
             con.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
     audit(by, "user.update", {"email": user["email"], **changes})
     return get_user(user_id)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------- passwords
+
+# scrypt from the standard library: memory-hard, salted, no extra dependency.
+_SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+
+def _unb64(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.scrypt(password.encode(), salt=salt, dklen=32, **_SCRYPT)
+    return f"scrypt${_SCRYPT['n']}${_SCRYPT['r']}${_SCRYPT['p']}${_b64(salt)}${_b64(dk)}"
+
+
+def verify_password(password: str, stored: str | None) -> bool:
+    if not stored or not password:
+        # Same work as a real check, so a missing account doesn't answer faster.
+        hashlib.scrypt(b"x", salt=b"0" * 16, dklen=32, **_SCRYPT)
+        return False
+    try:
+        algo, n, r, p, salt, dk = stored.split("$")
+        if algo != "scrypt":
+            return False
+        got = hashlib.scrypt(password.encode(), salt=_unb64(salt), dklen=32, n=int(n), r=int(r), p=int(p))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(got, _unb64(dk))
+
+
+def check_password_rules(password: str) -> None:
+    if not isinstance(password, str) or len(password) < MIN_PASSWORD:
+        raise EngineError(f"Use at least {MIN_PASSWORD} characters")
+    if len(password) > 200:
+        raise EngineError("That password is too long")
+
+
+def set_password(user_id: int, password: str, by: str) -> None:
+    check_password_rules(password)
+    with connect() as con:
+        con.execute("UPDATE users SET password_hash=?, setup_token=NULL, setup_expires=NULL WHERE id=?",
+                    (hash_password(password), user_id))
+        con.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    user = get_user(user_id)
+    audit(by, "user.password_set", {"email": user["email"] if user else user_id})
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def issue_setup_token(user_id: int, by: str) -> str:
+    """A one-time link token to set (or reset) a password. Only its hash is stored."""
+    token = secrets.token_urlsafe(32)
+    expires = (datetime.now(timezone.utc) + timedelta(days=SETUP_LINK_DAYS)).isoformat(timespec="seconds")
+    with connect() as con:
+        con.execute("UPDATE users SET setup_token=?, setup_expires=? WHERE id=?", (_token_hash(token), expires, user_id))
+    user = get_user(user_id)
+    audit(by, "user.setup_link", {"email": user["email"] if user else user_id})
+    return token
+
+
+def user_by_setup_token(token: str) -> dict | None:
+    if not token or len(token) > 200:
+        return None
+    with connect() as con:
+        r = con.execute("SELECT * FROM users WHERE setup_token=? AND setup_expires > ? AND active=1",
+                        (_token_hash(token), now())).fetchone()
+    return _row(r)
 
 
 # ---------------------------------------------------------------- sessions

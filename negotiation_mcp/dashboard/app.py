@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -377,15 +378,59 @@ async def api_document_download(request: Request) -> Response:
 
 # ---------------------------------------------------------------- sign-in
 
+def _client(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 async def signin(request: Request) -> Response:
     try:
         body = await request.json()
     except ValueError:
         body = {}
-    user = auth.PROVIDER.authenticate(str(body.get("email", "")), body.get("password"))
+    if not isinstance(body, dict):
+        body = {}
+    ip = _client(request)
+    if auth.signin_blocked(ip):
+        return fail(E.EngineError("Too many attempts. Wait 15 minutes and try again."), 429)
+    user = auth.PROVIDER.authenticate(str(body.get("email", "")), str(body.get("password") or ""))
     if not user:
+        auth.signin_failed(ip)
         appdb.audit(str(body.get("email", ""))[:200] or "unknown", "signin.failed")
-        return fail(E.EngineError("That email isn't registered, or the account is disabled. Ask an admin to invite you."), 401)
+        msg = ("Wrong email or password. If you haven't set a password yet, use the link your admin sent you."
+               if auth.PROVIDER.password_required else
+               "That email isn't registered, or the account is disabled. Ask an admin to invite you.")
+        return fail(E.EngineError(msg), 401)
+    sid = appdb.create_session(user["id"])
+    appdb.audit(user["email"], "signin")
+    resp = ok({"user": auth.public_user(user)})
+    auth.set_session_cookie(resp, request, sid)
+    return resp
+
+
+async def setup_password(request: Request) -> Response:
+    """GET: who a setup link is for. POST: set the password from the link, then sign in."""
+    if request.method == "GET":
+        user = appdb.user_by_setup_token(request.query_params.get("token", ""))
+        if not user:
+            return fail(E.EngineError("This link has expired or was already used. Ask an admin for a new one."), 404)
+        return ok({"email": user["email"], "name": user["name"], "min_length": appdb.MIN_PASSWORD})
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    ip = _client(request)
+    if auth.signin_blocked(ip):
+        return fail(E.EngineError("Too many attempts. Wait 15 minutes and try again."), 429)
+    user = appdb.user_by_setup_token(str(body.get("token", "")))
+    if not user:
+        auth.signin_failed(ip)
+        return fail(E.EngineError("This link has expired or was already used. Ask an admin for a new one."), 404)
+    try:
+        appdb.set_password(user["id"], str(body.get("password") or ""), user["email"])
+    except E.EngineError as e:
+        return fail(e)
     sid = appdb.create_session(user["id"])
     appdb.audit(user["email"], "signin")
     resp = ok({"user": auth.public_user(user)})
@@ -414,7 +459,11 @@ def create_app(breakage: float | None = None) -> Starlette:
     from . import admin, nego_routes, portal_routes
 
     STATE["breakage"] = breakage
-    appdb.init()
+    first_token = appdb.init()
+    if first_token:
+        base = (os.environ.get("NEGO_PUBLIC_URL") or "http://localhost:8080").rstrip("/")
+        print(f"\n  First admin created. Set the password here (valid {appdb.SETUP_LINK_DAYS} days):\n"
+              f"  {base}/#setpw/{first_token}\n", flush=True)
     nego_store.init()
     from ..nego import notify
 
@@ -426,6 +475,7 @@ def create_app(breakage: float | None = None) -> Starlette:
             Route("/analytics", analytics),
             Route("/api/auth/signin", signin, methods=["POST"]),
             Route("/api/auth/signout", signout, methods=["POST"]),
+            Route("/api/auth/setup", setup_password, methods=["GET", "POST"]),
             Route("/api/auth/me", me),
             Route("/api/home", api_home),
             Route("/api/chat", api_chat, methods=["POST"]),

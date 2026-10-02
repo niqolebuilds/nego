@@ -9,6 +9,7 @@ only admins can upload or delete.
 from __future__ import annotations
 
 import mimetypes
+import os
 import re
 import uuid
 from pathlib import Path
@@ -196,7 +197,28 @@ async def users(_: Request) -> Response:
 async def user_create(request: Request) -> Response:
     try:
         body = await request.json()
-        return ok(appdb.create_user(body.get("email", ""), body.get("name", ""), body.get("role", "viewer"), _who(request)))
+        user = appdb.create_user(body.get("email", ""), body.get("name", ""), body.get("role", "viewer"), _who(request))
+        return ok({**appdb.safe_user(user), "setup_link": _setup_link(request, user["id"])})
+    except (ValueError, EngineError) as e:
+        return fail(e)
+
+
+def _setup_link(request: Request, uid: int) -> str:
+    token = appdb.issue_setup_token(uid, _who(request))
+    base = (os.environ.get("NEGO_PUBLIC_URL") or str(request.base_url)).rstrip("/")
+    return f"{base}/#setpw/{token}"
+
+
+async def user_setup_link(request: Request) -> Response:
+    """A fresh one-time link for this person to set or reset their own password."""
+    try:
+        uid = int(request.path_params["uid"])
+        user = appdb.get_user(uid)
+        if not user:
+            raise EngineError("No such user")
+        if not user["active"]:
+            raise EngineError("Turn the account back on first")
+        return ok({"email": user["email"], "setup_link": _setup_link(request, uid), "days": appdb.SETUP_LINK_DAYS})
     except (ValueError, EngineError) as e:
         return fail(e)
 
@@ -207,8 +229,8 @@ async def user_update(request: Request) -> Response:
         uid = int(request.path_params["uid"])
         if uid == request.state.user["id"] and (body.get("role") == "viewer" or body.get("active") is False):
             raise EngineError("You can't remove your own admin access; ask another admin")
-        return ok(appdb.update_user(uid, _who(request), role=body.get("role"), active=body.get("active"),
-                                    name=body.get("name")))
+        return ok(appdb.safe_user(appdb.update_user(uid, _who(request), role=body.get("role"), active=body.get("active"),
+                                                    name=body.get("name"))))
     except (ValueError, EngineError) as e:
         return fail(e)
 
@@ -232,5 +254,6 @@ def routes() -> list[Route]:
         Route("/api/admin/users", users),
         Route("/api/admin/users", user_create, methods=["POST"]),
         Route("/api/admin/users/{uid}", user_update, methods=["PATCH"]),
+        Route("/api/admin/users/{uid}/setup-link", user_setup_link, methods=["POST"]),
         Route("/api/admin/activity", activity),
     ]

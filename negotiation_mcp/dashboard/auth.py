@@ -2,11 +2,13 @@
 
 Two parts, kept separate on purpose:
 
-* **Who you are** comes from a *sign-in provider*. Today that is ``DevSignIn``: any
-  registered, active email may sign in, with no password check. It is a stand-in so the
-  roles, pages and audit trail can be built and used now. Replace it with SSO (Microsoft
-  Entra ID or Google) or passwords by writing another provider with the same
-  ``authenticate`` method; nothing else changes.
+* **Who you are** comes from a *sign-in provider*. The default is ``PasswordSignIn``:
+  a registered, active email plus its password (scrypt-hashed in ``app.db``). Nobody
+  chooses a password for someone else: an admin copies a one-time setup link from
+  Admin → Users and the person sets their own. Repeated failures from one address are
+  slowed down. ``NEGO_AUTH=dev`` switches to ``DevSignIn`` (email only, no password) for
+  tests and local demos. SSO (Microsoft Entra ID) can be added later as another provider
+  with the same ``authenticate`` method; nothing else changes.
 * **What you may do** is enforced here on the server for every request, whatever the
   provider: all ``/api`` routes need a session, ``/api/admin`` routes need the admin
   role, and every request that changes something must carry the ``X-Requested-With``
@@ -24,6 +26,7 @@ import hmac
 import json
 import os
 import secrets
+import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -35,7 +38,7 @@ from ..settings import workspace
 COOKIE = "nego_session"
 CSRF_HEADER = "x-requested-with"
 CSRF_VALUE = "nego"
-PUBLIC_API = {"/api/auth/signin", "/api/auth/me", "/api/auth/provider"}
+PUBLIC_API = {"/api/auth/signin", "/api/auth/me", "/api/auth/provider", "/api/auth/setup"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
        "connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -77,7 +80,37 @@ class DevSignIn:
         return user if user and user["active"] else None
 
 
-PROVIDER = DevSignIn()
+class PasswordSignIn:
+    """Registered, active email plus the password the person set from their setup link."""
+
+    name = "password"
+    password_required = True
+    notice = "First time here? Use the set-password link your admin sent you."
+
+    def authenticate(self, email: str, password: str | None = None) -> dict | None:
+        user = appdb.user_by_email(email)
+        good = appdb.verify_password(password or "", user["password_hash"] if user else None)
+        return user if good and user["active"] else None
+
+
+PROVIDER = DevSignIn() if os.environ.get("NEGO_AUTH", "").lower() == "dev" else PasswordSignIn()
+
+# Failed sign-ins per client address: after FAIL_LIMIT in FAIL_WINDOW seconds, refuse for a while.
+FAIL_LIMIT, FAIL_WINDOW = 8, 15 * 60
+_fails: dict[str, list[float]] = {}
+
+
+def signin_blocked(ip: str) -> bool:
+    now = time.monotonic()
+    recent = [t for t in _fails.get(ip, []) if now - t < FAIL_WINDOW]
+    _fails[ip] = recent
+    return len(recent) >= FAIL_LIMIT
+
+
+def signin_failed(ip: str) -> None:
+    if len(_fails) > 10_000:  # keep memory bounded
+        _fails.clear()
+    _fails.setdefault(ip, []).append(time.monotonic())
 
 
 def public_user(u: dict) -> dict:

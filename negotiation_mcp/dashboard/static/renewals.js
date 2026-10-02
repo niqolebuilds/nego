@@ -1,7 +1,8 @@
 "use strict";
-// Renewals: a board with one column per stage, and a drawer to update one renewal
-// (stage, owner, next step, offers, notes) with its timeline and documents.
-// Every signed-in user can update progress; each change is recorded with who and when.
+// Renewals: one card per principal MOU, in columns by renewal stage. The stage comes from
+// that principal's negotiation (Negotiations tab), so it is never set twice. Opening a
+// card shows the MOU, the negotiation step and the engine's price targets for the
+// principal's SKUs. openRenewal() below is the per-SKU drawer the Assistant's calendar uses.
 
 const STAGES = [
   ["not_started", "Not started"], ["preparing", "Preparing"], ["negotiating", "In negotiation"],
@@ -185,114 +186,144 @@ async function renderDocs(box, r) {
   }
 }
 
-// ---------- board ----------
+// ---------- MOU board ----------
 function wireBoard() {
   if (board.wired) return;
   board.wired = true;
   $("drawer-close").addEventListener("click", closeDrawer);
   $("drawer-scrim").addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
-  ["f-hospital", "f-vendor", "f-search"].forEach((id) => $(id).addEventListener("input", renderBoard));
+  $("f-search").addEventListener("input", renderBoard);
+  $("f-category").addEventListener("change", renderBoard);
   $("f-window").addEventListener("change", loadBoard);
-  $("f-mine").addEventListener("change", loadBoard);
-}
-
-function fillFilters() {
-  const c = shell.catalog;
-  if (!c || $("f-hospital").options.length > 1) return;
-  c.hospitals.forEach((h) => $("f-hospital").append(el("option", { value: h, text: h })));
-  c.vendors.forEach((v) => $("f-vendor").append(el("option", { value: v, text: v })));
+  $("f-mine").addEventListener("change", renderBoard);
 }
 
 async function boardEnter(rest) {
   wireBoard();
-  fillFilters();
   $("f-mine").checked = rest && rest[0] === "mine";
   await loadBoard();
 }
 
 async function loadBoard() {
-  const [lo, hi] = $("f-window").value.split("-");
-  const mine = $("f-mine").checked ? "&mine=1" : "";
+  const days = $("f-window").value;
   $("board").classList.add("loading");
-  try { board.data = await api(`/api/pipeline?min_days=${lo}&max_days=${hi}${mine}`); }
+  try { board.data = await api(`/api/nego/mou-board${days ? `?max_days=${days}` : ""}`); }
   catch (e) { clear($("board")).append(el("p", { class: "error", text: e.message })); return; }
   finally { $("board").classList.remove("loading"); }
+  const cats = [...new Set(board.data.mous.map((m) => m.category).filter(Boolean))].sort();
+  const sel = $("f-category"), keep = sel.value;
+  clear(sel).append(el("option", { value: "", text: "All categories" }), ...cats.map((c) => el("option", { value: c, text: c })));
+  sel.value = cats.includes(keep) ? keep : "";
   renderKpis();
   renderBoard();
 }
 
 function renderKpis() {
-  const k = board.data.kpis;
+  const k = board.data.kpis, by = k.by_stage;
+  const inFlight = by.preparing + by.with_principal + by.negotiating;
   clear($("board-kpis")).append(
-    tile("Open renewals", num(k.open), `${num(board.data.renewals.length)} in this window`),
-    tile("Pipeline value", money(k.pipeline_value), "contract value still open"),
-    tile("Saving at target", money(k.saving_at_target), "if every open target is hit"),
-    tile("Saving realised", money(k.realised_saving), `${num(k.agreed)} agreed`),
+    tile("MOUs in this window", num(k.mous), `${num(by.renewed)} already renewed`),
+    tile("Not started", num(by.not_started), k.alerts ? `${num(k.alerts)} within ${board.data.alert_months} months: start now` : "none urgent"),
+    tile("In negotiation", num(inFlight), k.overdue ? `${num(k.overdue)} waiting on an overdue principal` : "nothing overdue"),
+    tile("Saving at target", money(k.saving_at_target), "engine targets on open MOUs' SKUs"),
   );
+  if (k.alerts) $("board-kpis").children[1].classList.add("alert");
   $("board-kpis").lastChild.classList.add("good");
+}
+
+function mouMatches(m) {
+  const text = $("f-search").value.trim().toLowerCase(), cat = $("f-category").value;
+  const mine = $("f-mine").checked && shell.user ? shell.user.email.toLowerCase() : "";
+  return (!text || `${m.name} ${m.distributor || ""} ${m.contact_name || ""}`.toLowerCase().includes(text))
+    && (!cat || m.category === cat)
+    && (!mine || ((m.cycle && m.cycle.created_by) || "").toLowerCase() === mine);
 }
 
 function renderBoard() {
   if (!board.data) return;
-  const h = $("f-hospital").value, v = $("f-vendor").value, text = $("f-search").value.trim().toLowerCase();
-  const rows = board.data.renewals.filter((r) => (!h || r.hospital === h) && (!v || r.vendor === v)
-    && (!text || `${r.sku_name} ${r.vendor} ${r.hospital}`.toLowerCase().includes(text)));
+  const rows = board.data.mous.filter(mouMatches);
   const cols = clear($("board"));
-  STAGES.forEach(([key, label]) => {
-    const inCol = rows.filter((r) => ((r.progress && r.progress.stage) || "not_started") === key);
-    const list = el("ul", { class: "cards", "data-stage": key });
-    inCol.forEach((r) => list.append(boardCard(r)));
-    if (!inCol.length) list.append(el("li", { class: "empty-col", text: "Drop a card here" }));
-    const col = el("section", { class: `col s-${key}`, "aria-label": label },
-      el("header", {}, el("b", { text: label }), el("span", { class: "count", text: String(inCol.length) })), list);
-    col.addEventListener("dragover", (e) => { e.preventDefault(); col.classList.add("over"); });
-    col.addEventListener("dragleave", () => col.classList.remove("over"));
-    col.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      col.classList.remove("over");
-      const k = e.dataTransfer.getData("text/plain");
-      await moveCard(k, key);
-    });
-    cols.append(col);
+  board.data.stages.forEach(({ key, label }) => {
+    const inCol = rows.filter((m) => m.stage === key);
+    const list = el("ul", { class: "cards" });
+    inCol.forEach((m) => list.append(mouCard(m)));
+    if (!inCol.length) list.append(el("li", { class: "empty-col", text: "None" }));
+    cols.append(el("section", { class: `col s-${key}`, "aria-label": label },
+      el("header", {}, el("b", { text: label }), el("span", { class: "count", text: String(inCol.length) })), list));
   });
 }
 
-async function moveCard(key, stage) {
-  const r = board.data.renewals.find((x) => x.key === key);
-  if (!r || (r.progress && r.progress.stage) === stage) return;
-  try {
-    await saveProgress(key, { stage });
-    toast(`${r.sku_name} → ${STAGE_LABEL[stage]}`);
-    if (stage === "agreed" && !(r.progress && r.progress.agreed_price)) openRenewal(r);
-    await loadBoard();
-  } catch (ex) { toast(ex.message); }
+function daysText(d) {
+  if (d == null) return "no end date";
+  return d < 0 ? `ended ${num(-d)}d ago` : `${num(d)}d left`;
 }
 
-function boardCard(r) {
-  const p = r.progress || {};
-  const move = el("select", { class: "move", "aria-label": `Stage for ${r.sku_name}` },
-    STAGES.map(([k, label]) => el("option", { value: k, text: label })));
-  move.value = p.stage || "not_started";
-  move.addEventListener("change", () => moveCard(r.key, move.value));
-  move.addEventListener("click", (e) => e.stopPropagation());
-  const card = el("li", { class: "bcard", draggable: "true", tabindex: 0, "data-key": r.key },
+function mouCard(m) {
+  const c = m.cycle, t = m.price_targets || {};
+  const open = c && c.status === "open";
+  const card = el("li", { class: `bcard${m.mou_alert ? " urgent" : ""}`, tabindex: 0 },
     el("div", { class: "b-top" },
-      el("span", { class: `days${r.days_left <= 45 ? " soon" : ""}` }, el("span", { class: "dot", "aria-hidden": "true" }),
-        `${shortDate.format(new Date(r.contract_end + "T00:00:00"))} · ${r.days_left}d`),
-      p.owner ? el("span", { class: "owner", title: p.owner, text: initials(p.owner.split("@")[0].replace(/[._-]/g, " ")) }) : null),
-    el("b", { class: "b-name", text: r.sku_name }),
-    el("span", { class: "meta", text: `${r.vendor} · ${r.hospital}` }),
-    el("div", { class: "b-figs" },
-      el("span", {}, "Target ", el("b", { text: unit(r.target_price) })),
-      r.saving_at_target > 0 ? el("span", { class: "save-sm", text: `saves ${money(r.saving_at_target)}` }) : null),
-    r.offer_check ? offerChip(r.offer_check) : null,
-    r.realised_saving ? el("span", { class: "zone good", text: `Realised ${money(r.realised_saving)}` }) : null,
-    p.next_step ? el("span", { class: "next", text: `Next: ${p.next_step}${p.due_date ? ` · ${shortDate.format(new Date(p.due_date + "T00:00:00"))}` : ""}` }) : null,
-    move);
-  card.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", r.key); card.classList.add("dragging"); });
-  card.addEventListener("dragend", () => card.classList.remove("dragging"));
-  card.addEventListener("click", () => openRenewal(r));
-  card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) openRenewal(r); });
+      el("span", { class: `days${m.mou_days_left != null && m.mou_days_left <= 90 ? " soon" : ""}` },
+        el("span", { class: "dot", "aria-hidden": "true" }),
+        m.mou_end ? `${fmtDate(m.mou_end)} · ${daysText(m.mou_days_left)}` : "MOU end not set")),
+    el("b", { class: "b-name", text: m.name }),
+    el("span", { class: "meta", text: [m.category, m.distributor && m.distributor !== m.name ? `via ${m.distributor}` : ""].filter(Boolean).join(" · ") }),
+    open ? el("span", { class: "next", text: `Step: ${c.step_label}${m.overdue_days ? ` · overdue ${m.overdue_days}d` : c.step_due ? ` · due ${fmtDate(c.step_due)}` : ""}` }) : null,
+    m.stage === "renewed" ? el("span", { class: "zone good", text: `New MOU to ${fmtDate(m.new_mou_end)}` }) : null,
+    m.mou_alert ? el("span", { class: "zone warn", text: "Start the negotiation" }) : null,
+    t.skus ? el("div", { class: "b-figs" },
+      el("span", {}, el("b", { text: num(t.skus) }), " SKUs priced"),
+      t.saving_at_target > 0 ? el("span", { class: "save-sm", text: `saves ${money(t.saving_at_target)}` }) : null) : null);
+  card.addEventListener("click", () => openMou(m));
+  card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) openMou(m); });
   return card;
+}
+
+function openMou(m) {
+  wireBoard();
+  closeDrawer.back = document.activeElement;
+  const body = clear($("drawer-body"));
+  $("drawer").hidden = false;
+  $("drawer-scrim").hidden = false;
+  const c = m.cycle, t = m.price_targets || { items: [] };
+  const isAdmin = shell.user && shell.user.role === "admin";
+  const open = c && c.status === "open";
+  const steps = board.data.steps.map((s) => s.key);
+  const at = c ? steps.indexOf(c.current_step) : -1;
+  const goNego = () => { closeDrawer(); location.hash = c ? `#nego/${c.id}` : "#nego"; };
+  body.append(
+    el("p", { class: "eyebrow", text: `MOU · ${m.category || "principal"}` }),
+    el("h2", { id: "drawer-title", text: m.name }),
+    el("p", { class: "muted", text: [m.distributor && `Distributor: ${m.distributor}`, m.binding === "Disc" ? "Discount-bound" : "Nett-price bound"].filter(Boolean).join(" · ") }),
+    el("div", { class: "pricegrid" },
+      el("div", {}, el("span", { text: "MOU start" }), el("b", { text: m.mou_start ? fmtDate(m.mou_start) : "—" })),
+      el("div", { class: m.mou_alert ? "t" : null }, el("span", { text: "MOU end" }), el("b", { text: m.mou_end ? fmtDate(m.mou_end) : "—" }), el("small", { text: daysText(m.mou_days_left) })),
+      el("div", {}, el("span", { text: "Stage" }), el("b", { text: (board.data.stages.find((s) => s.key === m.stage) || {}).label || m.stage })),
+      m.new_mou_end ? el("div", { class: "t" }, el("span", { text: "New MOU end" }), el("b", { text: fmtDate(m.new_mou_end) })) : null),
+    el("h3", { text: "Negotiation" }),
+    c ? el("div", {},
+      el("p", {}, `${open ? "Open" : "Closed"} · step ${at + 1} of ${steps.length}: `, el("b", { text: c.step_label }),
+        c.items ? ` · ${num(c.items)} items` : "", c.open_anomalies ? ` · ${num(c.open_anomalies)} open findings` : ""),
+      el("div", { class: "mini-steps", "aria-hidden": "true" }, steps.slice(0, -1).map((k, i) => el("i", { class: i < at ? "done" : i === at ? "now" : "" }))),
+      el("p", { class: "small muted", text: `New contract ${fmtDate(c.contract_start)} – ${fmtDate(c.contract_end)}` }))
+      : el("p", { class: "muted", text: isAdmin ? "No negotiation yet. Start one from Negotiations: it builds the item list from POs, the formulary and this MOU." : "No negotiation yet. An admin starts it from Negotiations." }),
+    el("div", { class: "actions" }, act(c ? "Open the negotiation" : "Go to Negotiations", goNego)),
+    el("h3", { text: "Contact" }),
+    el("p", { class: "small" }, m.contact_name || "—", el("br"), el("span", { class: "muted", text: [m.contact_email, m.contact_phone].filter(Boolean).join(" · ") || "No email or WhatsApp yet: links can't be sent automatically." })),
+    el("h3", { text: "Price targets from the engine" }),
+    t.items.length ? el("div", {},
+      el("p", { class: "small muted", text: `${num(t.skus)} SKUs in the price data from this principal or its distributor. Open one for its plan.` }),
+      el("div", { class: "table-wrap" }, (() => {
+        const tbl = el("table");
+        table(tbl, [
+          { label: "SKU", get: (r) => el("div", {}, el("b", { text: r.sku_name }), el("div", { class: "small muted", text: r.hospital })) },
+          { label: "Paying", num: true, get: (r) => unit(r.contract_price_per_clinical_unit) },
+          { label: "Target", num: true, get: (r) => el("b", { text: unit(r.target_price) }) },
+          { label: "Saving / yr", num: true, get: (r) => (r.saving_at_target > 0 ? money(r.saving_at_target) : "—") },
+        ], t.items, (r) => { const q = { sku: r.sku, vendor: r.vendor, skuName: r.sku_name }; closeDrawer(); location.hash = "#chat"; setTimeout(() => { me(`Negotiate ${r.sku_name} with ${r.vendor}`); negotiate(q); }, 60); });
+        return tbl;
+      })()))
+      : el("p", { class: "small muted", text: "No SKUs in the price data match this principal or distributor name yet. Load the real price history in Admin → Price data." }));
+  $("drawer-close").focus();
 }

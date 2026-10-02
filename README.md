@@ -213,9 +213,14 @@ NEGO_ADMIN_EMAIL=you@siloamhospitals.com python -m negotiation_mcp.dashboard --p
 It's a web app on 127.0.0.1 that makes no external requests, so it works on a hospital intranet.
 
 **Signing in and roles**
-- **Getting in:** *Get started* leads to **Sign in**. Only registered users get in, and admins
-  invite them; there's no self sign-up. On first run the app creates one admin from
-  `NEGO_ADMIN_EMAIL`, or `admin@example.com` if that isn't set.
+- **Getting in:** *Get started* leads to **Sign in** (email + password). Only registered users
+  get in, and admins invite them; there's no self sign-up. On first run the app creates one
+  admin from `NEGO_ADMIN_EMAIL` (or `admin@example.com`) and prints a one-time link to set
+  its password, unless `NEGO_ADMIN_PASSWORD` is given.
+- **Inviting:** Admin → Users → Invite shows a one-time link (7 days). The person opens it and
+  chooses their own password. *Reset link* on their row issues a new one.
+- **Vendors (principals)** never get an account: each negotiation step sends them a private,
+  expiring link.
 - **Viewers** can see everything and update renewal progress.
 - **Admins** can also:
   - upload price lists, records and documents
@@ -229,10 +234,14 @@ It's a web app on 127.0.0.1 that makes no external requests, so it works on a ho
   - writes need the app's own header.
 - **Sessions** are random IDs in an HMAC-signed, HttpOnly, SameSite=Strict cookie that lasts
   12 hours. Set `NEGO_SECRET`, or one is generated in the workspace.
-- **Passwords aren't checked yet.** Sign-in is a *development* stand-in that accepts any
-  registered, active email, and the sign-in page says so. Real authentication plugs into
-  `dashboard/auth.py` (replace `DevSignIn`, e.g. Microsoft Entra ID SSO). Roles, sessions
-  and checks stay as they are.
+- **Passwords** are scrypt-hashed; repeated failures from one address are blocked for 15
+  minutes. `NEGO_AUTH=dev` turns on an email-only sign-in for local demos and tests.
+  Microsoft Entra ID SSO can be added later as another provider in `dashboard/auth.py`.
+
+**Renewals** is one card per principal MOU, in columns Not started → Preparing → With
+principal → Negotiating → Renewed. The column comes from that principal's negotiation, so it
+moves by itself. A card lists the engine's price targets for the principal's SKUs (matched on
+the principal or distributor name in the price data).
 
 **Assistant**
 - **Two ways to ask:**
