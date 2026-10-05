@@ -211,3 +211,11 @@
 }
 .sanity { color: var(--warning); font-size: 12.5px; font-weight: 600; }
 .sanity:empty { display: none; }
+
+/* One-time password link shown to the admin after an invite or reset. */
+.row-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row-link .linkbox { flex: 1 1 320px; min-width: 0; font-family: ui-monospace, monospace; font-size: 12.5px; padding: 8px 10px; }
+
+/* MOU renewal board */
+.col.s-renewed header b { color: var(--good); }
+.bcard.urgent { border-left: 3px solid var(--sunset); }

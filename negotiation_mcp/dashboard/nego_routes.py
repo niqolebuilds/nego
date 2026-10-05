@@ -16,7 +16,7 @@ from .. import appdb
 from ..engine import EngineError
 from ..nego import assist, benchmark, demo, negotiate, notify, portal, service, store, vault
 from .admin import _form_file
-from .app import fail, ok
+from .app import _calendar, fail, ok
 
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -59,6 +59,43 @@ def handler(fn):
 @handler
 async def principals(_: Request) -> Response:
     return ok(service.principals())
+
+
+def _norm_vendor(name: str | None) -> str:
+    """Company name without legal form, case or word order: "PT Alkes Prima" == "Prima Alkes"."""
+    words = (name or "").lower().replace(".", " ").replace(",", " ").split()
+    return " ".join(sorted(w for w in words if w not in ("pt", "cv", "tbk")))
+
+
+@handler
+async def mou_board(request: Request) -> Response:
+    """Renewals: one card per principal MOU. Each card also lists the price-book SKUs whose
+    vendor is that principal or its distributor, with the engine's targets."""
+    q = request.query_params.get("max_days", "")
+    board = service.mou_board(int(q) if q.strip() else None)
+    try:
+        skus = _calendar(0, 3650)["renewals"]
+    except EngineError:
+        skus = []
+    by_vendor: dict[str, list[dict]] = {}
+    for r in skus:
+        by_vendor.setdefault(_norm_vendor(r["vendor"]), []).append(r)
+    for p in board["mous"]:
+        names = {_norm_vendor(p["name"]), _norm_vendor(p.get("distributor"))} - {""}
+        rows = [r for n in names for r in by_vendor.get(n, [])]
+        p["price_targets"] = {
+            "skus": len({r["sku"] for r in rows}),
+            "contract_value": sum(r["contract_value"] for r in rows),
+            "saving_at_target": sum(max(r["saving_at_target"], 0) for r in rows),
+            "items": [{k: r.get(k) for k in ("key", "sku", "sku_name", "vendor", "hospital", "contract_end", "days_left",
+                                             "contract_price_per_clinical_unit", "opening_ask", "target_price",
+                                             "fallback_price", "proposed_walk_away", "saving_at_target",
+                                             "quoted_unit", "clinical_units_per_quoted_unit")}
+                      for r in sorted(rows, key=lambda r: -r["saving_at_target"])[:50]],
+        }
+    k = board["kpis"]
+    k["saving_at_target"] = sum(p["price_targets"]["saving_at_target"] for p in board["mous"] if p["stage"] != "renewed")
+    return ok(board)
 
 
 @handler
@@ -408,6 +445,7 @@ async def assist_draft(request: Request) -> Response:
 def routes() -> list[Route]:
     return [
         Route("/api/nego/principals", principals),
+        Route("/api/nego/mou-board", mou_board),
         Route("/api/nego/principals/{pid:int}", principal),
         Route("/api/nego/cycles/{cid}", cycle),
         Route("/api/nego/cycles/{cid}/items", cycle_items),

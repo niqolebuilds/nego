@@ -4,7 +4,7 @@
 // same rules on every API call, so hiding a tab is convenience, not security.
 
 const shell = { user: null, catalog: null, intended: null, provider: null };
-const PAGES = ["welcome", "signin", "chat", "nego", "renewals", "admin"];
+const PAGES = ["welcome", "signin", "setpw", "chat", "nego", "renewals", "admin"];
 const NEEDS_AUTH = new Set(["chat", "nego", "renewals", "admin"]);
 
 function toast(text) {
@@ -52,6 +52,7 @@ async function route() {
   }
   if (page === "admin" && shell.user.role !== "admin") { location.hash = "#chat"; return; }
   if (page === "signin" && shell.user) { location.hash = "#chat"; return; }
+  if (page === "setpw") setpwEnter(rest[0] || "");
   PAGES.forEach((p) => { $(p).hidden = p !== page; });
   document.querySelectorAll(".apptabs a").forEach((a) => a.classList.toggle("on", a.dataset.page === page));
   document.body.dataset.page = page;
@@ -67,22 +68,61 @@ async function route() {
 async function signIn(e) {
   e.preventDefault();
   const email = $("signin-email").value.trim();
+  const password = $("signin-password").value;
   const err = $("signin-error");
   err.hidden = true;
   if (!email) { $("signin-email").focus(); return; }
+  if (!password && shell.provider && shell.provider.password_required) { $("signin-password").focus(); return; }
   try {
-    const d = await send("/api/auth/signin", "POST", { email });
-    shell.user = d.user;
-    await loadCatalog();
-    renderHeader();
-    toast(`Welcome, ${d.user.name.split(" ")[0]}`);
-    const go = shell.intended && shell.intended !== "#signin" ? shell.intended : "#chat";
-    shell.intended = null;
-    location.hash = go;
+    const d = await send("/api/auth/signin", "POST", { email, password });
+    $("signin-password").value = "";
+    await afterSignIn(d);
   } catch (ex) {
     err.textContent = ex.message;
     err.hidden = false;
   }
+}
+
+async function afterSignIn(d) {
+  shell.user = d.user;
+  await loadCatalog();
+  renderHeader();
+  toast(`Welcome, ${d.user.name.split(" ")[0]}`);
+  const go = shell.intended && shell.intended !== "#signin" ? shell.intended : "#chat";
+  shell.intended = null;
+  location.hash = go;
+}
+
+// One-time link from an admin: #setpw/<token>. The person chooses their own password.
+async function setpwEnter(token) {
+  const who = $("setpw-who"), err = $("setpw-error"), btn = $("setpw-submit");
+  err.hidden = true;
+  btn.disabled = true;
+  setpwEnter.token = token;
+  try {
+    const d = await api(`/api/auth/setup?token=${encodeURIComponent(token)}`);
+    who.textContent = `For ${d.name} (${d.email}). Use at least ${d.min_length} characters.`;
+    btn.disabled = false;
+    setTimeout(() => $("setpw-password").focus(), 30);
+  } catch (ex) {
+    who.textContent = "";
+    err.textContent = ex.message;
+    err.hidden = false;
+  }
+}
+
+async function setPassword(e) {
+  e.preventDefault();
+  const pw = $("setpw-password").value, again = $("setpw-confirm").value, err = $("setpw-error");
+  err.hidden = true;
+  if (pw !== again) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
+  try {
+    const d = await send("/api/auth/setup", "POST", { token: setpwEnter.token, password: pw });
+    $("setpw-password").value = ""; $("setpw-confirm").value = "";
+    setpwEnter.token = null;
+    history.replaceState(null, "", "#chat");
+    await afterSignIn(d);
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 }
 
 async function signOut() {
@@ -99,6 +139,7 @@ async function shellInit() {
     shell.user = d.user;
     shell.provider = d.provider;
     $("signin-notice").textContent = d.provider ? d.provider.notice : "";
+    $("signin-password-row").hidden = !(d.provider && d.provider.password_required);
     if (shell.user) await loadCatalog();
   } catch (e) {
     $("welcome").prepend(el("p", { class: "error", text: `Can't reach the server: ${e.message}` }));
@@ -106,6 +147,7 @@ async function shellInit() {
   renderHeader();
   $("start").addEventListener("click", () => { location.hash = shell.user ? "#chat" : "#signin"; });
   $("signin-form").addEventListener("submit", signIn);
+  $("setpw-form").addEventListener("submit", setPassword);
   $("signout").addEventListener("click", signOut);
   window.addEventListener("nego:signed-out", () => {
     if (!shell.user) return;

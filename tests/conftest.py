@@ -14,6 +14,7 @@ import pytest
 os.environ["NEGO_HOME"] = tempfile.mkdtemp(prefix="nego-test-")
 os.environ.pop("NEGOTIATION_DATA_DIR", None)
 os.environ["NEGO_SCHEDULER"] = "0"  # tests call notify.daily() themselves
+os.environ["NEGO_AUTH"] = "dev"  # most tests sign in by email; test_auth checks the password provider
 
 from negotiation_mcp.pricebook import PRICE_HISTORY_COLUMNS, PriceBook
 

@@ -49,6 +49,54 @@ def principals(today: date | None = None) -> dict:
     return {"principals": rows, "alert_months": alert_months, "steps": steps()}
 
 
+# Renewals board: one card per principal MOU. The stage is read from that principal's
+# negotiation, never set by hand, so the board and Negotiations can't disagree.
+MOU_STAGES: tuple[tuple[str, str], ...] = (
+    ("not_started", "Not started"),
+    ("preparing", "Preparing"),
+    ("with_principal", "With principal"),
+    ("negotiating", "Negotiating"),
+    ("renewed", "Renewed"),
+)
+_STEP_STAGE = {"prepare": "preparing", "identification": "with_principal", "current_mou": "with_principal",
+               "rfq": "with_principal", "counter_offer": "negotiating", "feedback1": "negotiating",
+               "online_nego": "negotiating", "submission": "negotiating", "closed": "renewed"}
+
+
+def mou_stage(p: dict) -> str:
+    c = p.get("cycle")
+    if not c:
+        return "not_started"
+    if c["status"] == "open":
+        return _STEP_STAGE.get(c["current_step"], "preparing")
+    # A closed negotiation renewed this MOU if its new contract runs past the current end.
+    if c.get("contract_end") and (not p.get("mou_end") or c["contract_end"] > p["mou_end"]):
+        return "renewed"
+    return "not_started"
+
+
+def mou_board(max_days: int | None = None, today: date | None = None) -> dict:
+    """Every principal MOU ending within ``max_days`` (all when None), with its renewal stage."""
+    d = principals(today)
+    out = []
+    for p in d["principals"]:
+        if max_days is not None and (p["mou_days_left"] is None or p["mou_days_left"] > max_days):
+            continue
+        p["stage"] = mou_stage(p)
+        c = p["cycle"]
+        p["new_mou_end"] = c["contract_end"] if p["stage"] == "renewed" else None
+        out.append(p)
+    out.sort(key=lambda p: (p["mou_days_left"] is None, p["mou_days_left"] if p["mou_days_left"] is not None else 0))
+    by_stage = {k: sum(1 for p in out if p["stage"] == k) for k, _ in MOU_STAGES}
+    return {"mous": out, "stages": [{"key": k, "label": label} for k, label in MOU_STAGES], "steps": d["steps"],
+            "alert_months": d["alert_months"],
+            "kpis": {"mous": len(out), "by_stage": by_stage,
+                     "alerts": sum(1 for p in out if p["mou_alert"]),
+                     "overdue": sum(1 for p in out if p["overdue_days"]),
+                     "lapsed": sum(1 for p in out if p["mou_days_left"] is not None and p["mou_days_left"] < 0
+                                   and p["stage"] != "renewed")}}
+
+
 def steps() -> list[dict]:
     return [{"key": k, "label": label, "who": who} for k, label, who in M.STEPS]
 

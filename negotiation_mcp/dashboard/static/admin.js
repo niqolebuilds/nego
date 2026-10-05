@@ -9,7 +9,7 @@ function adminEnter(sub) {
   adminState.sub = ["data", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
   document.querySelectorAll("#admin-subtabs a").forEach((a) => a.classList.toggle("on", a.dataset.sub === adminState.sub));
   const body = clear($("admin-body"));
-  ({ data: adminData, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
+  return ({ data: adminData, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
 }
 
 function card(title, sub, ...kids) {
@@ -285,12 +285,17 @@ async function adminUsers(body) {
     el("label", { for: "u-email" }, "Email", email), el("label", { for: "u-name" }, "Name", name), el("label", { for: "u-role" }, "Role", role),
     el("div", { class: "actions" }, el("button", { type: "submit", class: "act", text: "Invite" }), msg));
   const listBox = el("div");
+  const linkBox = el("div", { id: "setup-link-box" });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    try { await send("/api/admin/users", "POST", { email: email.value, name: name.value, role: role.value }); toast(`Invited ${email.value}`); adminEnter("users"); }
-    catch (ex) { msg.textContent = ex.message; }
+    try {
+      const u = await send("/api/admin/users", "POST", { email: email.value, name: name.value, role: role.value });
+      await adminEnter("users");
+      if (u.setup_link) showSetupLink(u.email, u.setup_link);
+    } catch (ex) { msg.textContent = ex.message; }
   });
-  body.append(card("Invite someone", "Only invited people can sign in. They sign in with this email.", form), card("Users", null, listBox));
+  body.append(card("Invite someone", "Only invited people can sign in. Inviting gives you a one-time link: send it to them (email or WhatsApp) so they set their own password. You never see their password.", form),
+    linkBox, card("Users", null, listBox));
   let users;
   try { users = (await api("/api/admin/users")).users; } catch (e) { listBox.append(el("p", { class: "error", text: e.message })); return; }
   const tbl = el("table");
@@ -308,10 +313,29 @@ async function adminUsers(body) {
       return s;
     } },
     { label: "Status", get: (u) => el("span", { class: `zone ${u.active ? "good" : "bad"}`, text: u.active ? "Active" : "Disabled" }) },
+    { label: "Password", get: (u) => el("span", { class: `zone ${u.has_password ? "good" : "warn"}`, text: u.has_password ? "Set" : "Not set yet" }) },
     { label: "Last sign-in", get: (u) => (u.last_login ? stamp.format(new Date(u.last_login)) : "never") },
-    { label: "", get: (u) => el("button", { type: "button", class: "act ghost", text: u.active ? "Disable" : "Enable",
-      onclick: () => patch(u, { active: !u.active }, `${u.name} ${u.active ? "disabled" : "enabled"}`) }) },
+    { label: "", get: (u) => el("div", { class: "actions" },
+      u.active ? el("button", { type: "button", class: "act ghost", text: u.has_password ? "Reset link" : "Setup link",
+        onclick: async () => {
+          try { const r = await send(`/api/admin/users/${u.id}/setup-link`, "POST", {}); showSetupLink(r.email, r.setup_link); }
+          catch (ex) { toast(ex.message); }
+        } }) : null,
+      el("button", { type: "button", class: "act ghost", text: u.active ? "Disable" : "Enable",
+        onclick: () => patch(u, { active: !u.active }, `${u.name} ${u.active ? "disabled" : "enabled"}`) })) },
   ], users);
+}
+
+function showSetupLink(email, link) {
+  const box = $("setup-link-box");
+  if (!box) return;
+  const input = el("input", { value: link, readonly: "", "aria-label": "Setup link", class: "linkbox" });
+  const copy = el("button", { type: "button", class: "act", text: "Copy link",
+    onclick: async () => { try { await navigator.clipboard.writeText(link); toast("Link copied"); } catch (_) { input.select(); } } });
+  clear(box).append(card(`Password link for ${email}`,
+    "Send this to them. It works once and expires in 7 days. Opening it lets them choose their password and signs them in. Making a new link cancels the old one.",
+    el("div", { class: "row-link" }, input, copy)));
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // ---------- activity ----------
@@ -319,7 +343,9 @@ function describeEvent(e) {
   const d = e.detail || {};
   switch (e.action) {
     case "signin": return "signed in";
-    case "signin.failed": return "tried to sign in (not registered)";
+    case "signin.failed": return "failed to sign in";
+    case "user.password_set": return `set a password for ${d.email}`;
+    case "user.setup_link": return `made a password link for ${d.email}`;
     case "user.invite": return `invited ${d.email} as ${d.role}`;
     case "user.update": return `updated ${d.email}${d.role ? ` (role: ${d.role})` : ""}${d.active === 0 ? " (disabled)" : d.active === 1 ? " (enabled)" : ""}`;
     case "upload.stage": return `checked ${d.file} (${num(d.rows)} rows, ${d.status})`;
