@@ -259,3 +259,12 @@ def test_link_routes_admin_only(admin):
     v = TestClient(admin.app)
     v.post("/api/auth/signin", json={"email": "v@example.com"}, headers=H)
     assert v.post(f"/api/admin/nego/cycles/{c['id']}/links", json={}, headers=H).status_code == 403
+
+
+def test_portal_help_contact_comes_from_env(admin, monkeypatch):
+    c = make_cycle("PT Bantuan Portal")
+    pa, _ = open_portal(admin, c["id"])
+    assert pa.get("/api/p/me").json()["help"] == {"whatsapp": "", "email": ""}
+    monkeypatch.setenv("NEGO_HELP_WHATSAPP", "+62 812 000 111")
+    monkeypatch.setenv("NEGO_HELP_EMAIL", "pengadaan@siloam.example")
+    assert pa.get("/api/p/me").json()["help"] == {"whatsapp": "+62 812 000 111", "email": "pengadaan@siloam.example"}

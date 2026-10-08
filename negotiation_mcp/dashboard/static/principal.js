@@ -6,13 +6,15 @@
 
 const P = { me: null, lang: "id", filter: "todo", q: "", items: [], total: 0, counts: {}, view: "list", one: 0, loading: false };
 try { P.lang = localStorage.getItem("nego-p-lang") || "id"; } catch (_) { /* private mode */ }
-try { P.view = localStorage.getItem("nego-p-view") || (window.innerWidth < 700 ? "one" : "list"); } catch (_) { P.view = window.innerWidth < 700 ? "one" : "list"; }
+const NARROW = window.innerWidth < 700;
+try { P.view = localStorage.getItem("nego-p-view") || (NARROW ? "one" : "table"); } catch (_) { P.view = NARROW ? "one" : "table"; }
+if (!["table", "list", "one"].includes(P.view) || (NARROW && P.view === "table")) P.view = NARROW ? "one" : "table";
 
 const T = {
   id: {
     portal: "Portal Principal Siloam", loading: "Memuat…",
     invalid_t: "Tautan tidak berlaku", invalid_p: "Tautan ini sudah kedaluwarsa atau dicabut. Minta tautan baru ke tim pengadaan Siloam.",
-    step_of: (n) => `Langkah ${n} dari 6`,
+    step_of: (n) => `Langkah ${n} dari 6`, your_task: "Tugas Anda",
     steps: { identification: "Konfirmasi data item", rfq: "Isi harga penawaran (RFQ)", feedback1: "Tanggapi counter offer Siloam", submission: "Kirim dokumen perusahaan" },
     last_step: "Langkah terakhir", doc_required: "Wajib", doc_optional: "Opsional", doc_upload: "Unggah", doc_uploaded: "Terunggah", doc_delete: "Hapus",
     doc_note: "Dokumen disimpan terenkripsi dan hanya bisa dibuka tim pengadaan Siloam. PDF, JPG, PNG, DOCX, XLSX atau ZIP, maksimal 15 MB per file.",
@@ -22,10 +24,14 @@ const T = {
       feedback1: ["Siloam mengirim counter offer berupa diskon per SKU.", "Klik Terima, atau isi diskon Anda sendiri dan alasannya.", "Klik Kirim ke Siloam jika sudah selesai."],
       submission: ["Harga sudah disepakati. Langkah terakhir: unggah dokumen perusahaan.", "Dokumen bertanda Wajib harus diunggah sebelum mengirim.", "Klik Kirim ke Siloam jika sudah lengkap."],
     },
+    help: "Bantuan", help_t: "Butuh bantuan?", help_p: "Hubungi tim pengadaan Siloam. Kami akan membantu Anda mengisi.", help_wa: "Chat WhatsApp", help_mail: "Kirim email", help_none: "Balas email dari Siloam, tim kami akan membantu.",
+    excel_or: "Lebih suka Excel? Unduh file, isi, lalu unggah kembali.", view_table: "Tabel", view_list: "Kartu", view_one: "Satu per satu",
+    h_item: "Barang", h_status: "Status", h_brand: "Brand", h_ref: "REF", h_remarks: "Keterangan", h_mou: "MOU", h_hna: "HNA / kemasan", h_qty: "Isi (pcs)", h_disc: "Diskon %", h_unit: "Harga/pcs", h_chg: "Perubahan", h_rfq: "Harga Anda", h_co: "Counter Siloam", h_own: "Diskon Anda",
+    tip_paste: "Tips: salin sel dari Excel lalu tempel di kolom pertama yang mau diisi.",
     contract: "Kontrak", due: "Batas waktu", progress: (d, a) => `${d} dari ${a} SKU selesai`,
     download: "Unduh Excel", upload: "Unggah Excel", send: "Kirim ke Siloam",
     f: { todo: "Belum diisi", check: "Perlu dicek", up: "Harga naik", all: "Semua", done: "Selesai" },
-    search: "Cari nama, kode, brand, REF", view_list: "Daftar", view_one: "Satu per satu",
+    search: "Cari nama, kode, brand, REF",
     fill_rfq: "Isi semua yang kosong sama dengan MOU", fill_fb1: "Terima semua counter offer", next_todo: "Ke SKU berikutnya yang belum diisi",
     fill_confirm_rfq: (n) => `Isi semua SKU yang belum diisi dengan harga MOU saat ini? Anda tetap bisa mengubahnya.`,
     fill_confirm_fb1: () => "Terima counter offer Siloam untuk semua SKU yang belum ditanggapi?",
@@ -51,7 +57,7 @@ const T = {
   en: {
     portal: "Siloam Principal Portal", loading: "Loading…",
     invalid_t: "Link not valid", invalid_p: "This link has expired or was revoked. Ask Siloam's procurement team for a new one.",
-    step_of: (n) => `Step ${n} of 6`,
+    step_of: (n) => `Step ${n} of 6`, your_task: "Your task",
     steps: { identification: "Confirm item details", rfq: "Quote your prices (RFQ)", feedback1: "Respond to Siloam's counter offer", submission: "Send company documents" },
     last_step: "Last step", doc_required: "Required", doc_optional: "Optional", doc_upload: "Upload", doc_uploaded: "Uploaded", doc_delete: "Delete",
     doc_note: "Documents are stored encrypted and only Siloam's procurement team can open them. PDF, JPG, PNG, DOCX, XLSX or ZIP, up to 15 MB each.",
@@ -61,10 +67,14 @@ const T = {
       feedback1: ["Siloam sent a counter-offer discount for each SKU.", "Click Accept, or enter your own discount and the reason.", "Click Send to Siloam when you're done."],
       submission: ["Prices are agreed. Last step: upload your company documents.", "Documents marked Required must be uploaded before sending.", "Click Send to Siloam when everything is there."],
     },
+    help: "Help", help_t: "Need help?", help_p: "Contact Siloam's procurement team. We'll help you fill it in.", help_wa: "Chat on WhatsApp", help_mail: "Send an email", help_none: "Reply to Siloam's email and our team will help.",
+    excel_or: "Prefer Excel? Download the file, fill it in, then upload it again.", view_table: "Table", view_list: "Cards", view_one: "One by one",
+    h_item: "Item", h_status: "Status", h_brand: "Brand", h_ref: "REF", h_remarks: "Remarks", h_mou: "MOU", h_hna: "HNA / pack", h_qty: "Pieces", h_disc: "Discount %", h_unit: "Price/pc", h_chg: "Change", h_rfq: "Your price", h_co: "Siloam counter", h_own: "Your discount",
+    tip_paste: "Tip: copy cells from Excel and paste them into the first column you want to fill.",
     contract: "Contract", due: "Due", progress: (d, a) => `${d} of ${a} SKUs done`,
     download: "Download Excel", upload: "Upload Excel", send: "Send to Siloam",
     f: { todo: "To fill", check: "To check", up: "Price up", all: "All", done: "Done" },
-    search: "Search name, code, brand, REF", view_list: "List", view_one: "One at a time",
+    search: "Search name, code, brand, REF",
     fill_rfq: "Fill every blank SKU with the MOU price", fill_fb1: "Accept every counter offer", next_todo: "Next SKU to fill",
     fill_confirm_rfq: () => "Fill every blank SKU with the current MOU price? You can still change them.",
     fill_confirm_fb1: () => "Accept Siloam's counter offer for every SKU you haven't answered?",
@@ -151,6 +161,7 @@ function showInvalid() {
 
 async function boot() {
   document.querySelectorAll(".lang button").forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang)));
+  $("helpbtn").addEventListener("click", openHelp);
   setLang(P.lang, false);
   if (new URLSearchParams(location.search).get("invalid")) { showInvalid(); return; }
   try { P.me = await call("/api/p/me"); } catch (_) { return; }
@@ -164,6 +175,7 @@ function setLang(l, redraw = true) {
   document.documentElement.lang = P.lang;
   document.querySelectorAll(".lang button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === P.lang)));
   $("t-portal").textContent = t("portal");
+  $("helpbtn").textContent = t("help");
   document.title = t("portal");
   if (redraw && P.me) render();
 }
@@ -181,20 +193,24 @@ function render() {
   }
   const howto = el("ol", { class: "howto" }, t(`howto.${me.step}`).map((s) => el("li", { text: s })));
   const prog = el("div", { class: "prog" }, el("div", { class: "bar" }, el("i", { id: "prog-fill" })), el("span", { id: "prog-text" }));
-  put(app, 
+  const sendbar = el("div", { class: "sendbar" }, prog,
+    el("button", { type: "button", class: "pbtn primary big", text: t("send"), onclick: openSummary }));
+  put(app,
     el("section", { class: "pcard stepcard" },
-      el("p", { class: "eyebrow", text: me.step_no >= 7 ? t("last_step") : t("step_of", me.step_no) }),
+      el("p", { class: "eyebrow", text: t("your_task") }),
       el("h1", { text: t(`steps.${me.step}`) }),
       el("p", { class: "muted", text: `${t("contract")} ${fmtDate(me.contract.start)} – ${fmtDate(me.contract.end)}${me.due ? ` · ${t("due")} ${fmtDate(me.due)}` : ""}` }),
-      howto, prog,
-      el("div", { class: "pactions" },
-        el("button", { type: "button", class: "pbtn primary", text: t("send"), onclick: openSummary }),
-        me.step === "submission" ? null : el("a", { class: "pbtn", href: "/api/p/template.xlsx", text: t("download") }),
-        me.step === "submission" ? null : el("button", { type: "button", class: "pbtn", text: t("upload"), onclick: openUpload }))));
-  if (me.step === "submission") { prog.hidden = true; put(app, el("section", { class: "pcard", id: "docs" })); loadDocs(); return; }
-  put(app, toolbar(), el("div", { id: "list", class: `skus view-${P.view}` }), el("div", { id: "more" }));
+      howto,
+      me.step === "submission" ? null : el("div", { class: "excelrow" },
+        el("span", { class: "muted", text: t("excel_or") }),
+        el("a", { class: "pbtn", href: "/api/p/template.xlsx", text: t("download") }),
+        el("button", { type: "button", class: "pbtn", text: t("upload"), onclick: openUpload }))));
+  if (me.step === "submission") { prog.hidden = true; put(app, el("section", { class: "pcard", id: "docs" }), sendbar); loadDocs(); return; }
+  put(app, toolbar(), el("div", { id: "list", class: `skus view-${P.view}` }), el("div", { id: "more" }), sendbar);
   load(true);
 }
+
+const VIEWS = () => (window.innerWidth < 700 ? ["list", "one"] : ["table", "list", "one"]);
 
 function toolbar() {
   const chips = el("div", { class: "chips", role: "tablist", id: "chips" });
@@ -202,8 +218,8 @@ function toolbar() {
   let timer;
   search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { P.q = search.value.trim(); load(true); }, 250); });
   const views = el("div", { class: "seg", role: "group" },
-    ["list", "one"].map((v) => el("button", { type: "button", "aria-pressed": String(P.view === v), text: t(`view_${v}`),
-      onclick: () => { P.view = v; try { localStorage.setItem("nego-p-view", v); } catch (_) { /* ignore */ } P.one = 0; renderList(); document.querySelectorAll(".seg button").forEach((b, i) => b.setAttribute("aria-pressed", String(["list", "one"][i] === v))); } })));
+    VIEWS().map((v) => el("button", { type: "button", "aria-pressed": String(P.view === v), text: t(`view_${v}`),
+      onclick: () => { P.view = v; try { localStorage.setItem("nego-p-view", v); } catch (_) { /* ignore */ } P.one = 0; renderList(); document.querySelectorAll(".seg button").forEach((b, i) => b.setAttribute("aria-pressed", String(VIEWS()[i] === v))); } })));
   const bulk = P.me.step === "identification" ? null :
     el("button", { type: "button", class: "pbtn ghost", text: t(P.me.step === "rfq" ? "fill_rfq" : "fill_fb1"), onclick: bulkFill });
   return el("section", { class: "toolbar" }, chips,
@@ -262,7 +278,11 @@ function renderList() {
       el("button", { type: "button", class: "pbtn primary", text: t("next"), disabled: P.one >= P.total - 1, onclick: goNext })));
     return;
   }
-  P.items.forEach((it) => put(list, card(it)));
+  if (P.view === "table") {
+    put(list, theader(), ...P.items.map(trow), el("p", { class: "muted small tip", text: t("tip_paste") }));
+    list.addEventListener("keydown", tableKeys);
+    list.addEventListener("paste", tablePaste);
+  } else P.items.forEach((it) => put(list, card(it)));
   if (P.items.length < P.total) put(more, el("button", { type: "button", class: "pbtn wide", text: t("more"), onclick: () => load(false) }));
 }
 
@@ -279,7 +299,7 @@ function nextTodo() {
     const i = P.items.findIndex((x, k) => k > P.one && x.state === "missing");
     if (i >= 0) { P.one = i; renderList(); focusFirst(); return; }
   } else {
-    const a = $("list").querySelector("article.st-missing");
+    const a = $("list").querySelector("article.st-missing, .trow.st-missing");
     if (a) { a.scrollIntoView({ behavior: "smooth", block: "center" }); const i = a.querySelector("input, button.sbtn"); if (i) setTimeout(() => i.focus(), 300); return; }
   }
   P.filter = "todo"; load(true);
@@ -288,6 +308,143 @@ function nextTodo() {
 async function bulkFill() {
   if (!confirm(t(P.me.step === "rfq" ? "fill_confirm_rfq" : "fill_confirm_fb1"))) return;
   try { const r = await call("/api/p/fill", { method: "POST", body: {} }); toast(t("filled", r.filled)); load(true); } catch (e) { toast(e.message); }
+}
+
+// ---------- table view (looks and moves like an Excel sheet) ----------
+const TCOLS = {
+  identification: ["item", "status", "brand", "ref", "remarks"],
+  rfq: ["item", "status", "mou", "hna", "qty", "disc", "unit", "chg"],
+  feedback1: ["item", "rfq", "co", "accept", "own", "unit"],
+};
+const HEAD = { item: "h_item", status: "h_status", brand: "h_brand", ref: "h_ref", remarks: "h_remarks", mou: "h_mou", hna: "h_hna", qty: "h_qty", disc: "h_disc", unit: "h_unit", chg: "h_chg", rfq: "h_rfq", co: "h_co", accept: "", own: "h_own" };
+
+function theader() {
+  return el("div", { class: `thead tc-${P.me.step}`, role: "row" },
+    TCOLS[P.me.step].map((c) => el("span", { role: "columnheader", text: HEAD[c] ? t(HEAD[c]) : "" })));
+}
+
+function statusSelect(a, it) {
+  const sel = el("select", { "aria-label": t("status"), "data-col": "status" },
+    el("option", { value: "Active", text: t("active"), selected: it.item_status === "Active" }),
+    el("option", { value: "Discontinue", text: t("disc_btn"), selected: it.item_status === "Discontinue" }));
+  if (!it.item_status) sel.insertBefore(el("option", { value: "", text: "—", selected: true }), sel.firstChild);
+  sel.addEventListener("change", () => { if (sel.value) save(a, it, { item_status: sel.value }); });
+  return sel;
+}
+
+function tinput(a, it, col, field, attrs, toServer, show) {
+  const i = el("input", { "data-col": col, value: show(it[field]) || null, ...attrs });
+  i.addEventListener("change", () => save(a, it, { [field]: toServer(i.value) || null }));
+  return i;
+}
+
+function trow(it) {
+  const step = P.me.step;
+  const a = el("div", { class: `trow st-${it.state}`, "data-id": it.id, role: "row" });
+  const off = it.item_status === "Discontinue";
+  const cell = {};
+  cell.item = el("div", { class: "tc-item" },
+    el("b", { text: it.item_name || "—" }),
+    el("span", { class: "meta", text: [it.erp_code, it.brand, it.catalog_no].filter(Boolean).join(" · ") }),
+    el("span", { class: `state s-${it.state}`, text: t(`state.${it.state}`) }),
+    el("span", { class: "savestate", "aria-live": "polite" }));
+  cell.status = statusSelect(a, it);
+  if (step === "identification") {
+    const plain = (field, col) => tinput(a, it, col, field, { "aria-label": t(HEAD[col]) }, (v) => v.trim(), (v) => v || "");
+    cell.brand = plain("brand", "brand"); cell.ref = plain("catalog_no", "ref"); cell.remarks = plain("remarks", "remarks");
+  } else if (step === "rfq") {
+    cell.mou = el("div", { class: "tc-mou" },
+      el("span", { text: it.mou_unit_price != null ? rp(it.mou_unit_price) : "—" }),
+      it.mou_hna != null && !off ? el("button", { type: "button", class: "pbtn small", title: t("same_mou"), text: "=",
+        onclick: () => save(a, it, { rfq_qty: it.mou_qty ?? 1, rfq_hna: String(it.mou_hna).replace(".", ","), rfq_disc: String(+((it.mou_disc || 0) * 100).toFixed(4)).replace(".", ","), ...(it.item_status ? {} : { item_status: "Active" }) }, true) }) : null);
+    const hna = tinput(a, it, "hna", "rfq_hna", { inputmode: "decimal", "aria-label": t("h_hna") }, hnaValue, hnaShow);
+    const qty = tinput(a, it, "qty", "rfq_qty", { inputmode: "numeric", "aria-label": t("h_qty") }, digits, (v) => (v != null ? String(v) : ""));
+    const disc = tinput(a, it, "disc", "rfq_disc", { inputmode: "decimal", "aria-label": t("h_disc") }, discValue, discShow);
+    for (const i of [hna, qty, disc]) i.disabled = off;
+    const unit = el("b", { class: "tc-unit" }), chg = el("span", { class: "chg" });
+    const live = () => {
+      const n = (x) => +String(x).replace(",", ".");
+      const pr = unitPrice(n(hnaValue(hna.value)) || null, +digits(qty.value) || null, (n(discValue(disc.value)) || 0) / 100);
+      unit.textContent = off ? "—" : pr == null ? "—" : rp(pr);
+      if (pr != null && it.mou_unit_price && !off) {
+        const ch = pr / it.mou_unit_price - 1;
+        chg.className = `chg ${ch > 0.0005 ? "up" : ch < -0.0005 ? "down" : ""}`;
+        chg.textContent = Math.abs(ch) < 0.0005 ? t("same") : `${ch > 0 ? "+" : ""}${pctTxt(ch)}`;
+      } else { chg.className = "chg"; chg.textContent = ""; }
+    };
+    hna.addEventListener("input", () => { const v = hnaValue(hna.value); hna.value = v ? hnaShow(v) : ""; live(); });
+    qty.addEventListener("input", () => { qty.value = digits(qty.value); live(); });
+    disc.addEventListener("input", () => { disc.value = disc.value.replace(/[^\d.,]/g, ""); live(); });
+    cell.hna = el("div", { class: "affix" }, el("span", { text: "Rp" }), hna);
+    cell.qty = qty; cell.disc = el("div", { class: "affix" }, disc, el("span", { text: "%" }));
+    cell.unit = unit; cell.chg = chg;
+    live();
+  } else {
+    const has = it.co_disc != null;
+    cell.rfq = el("span", { text: rp(it.rfq_unit_price) });
+    cell.co = has ? el("span", {}, `${pctTxt(it.co_disc)} → `, el("b", { text: rp(it.co_unit_price) })) : el("span", { class: "muted", text: "—" });
+    const accepted = has && it.fb1_disc != null && Math.abs(it.fb1_disc - it.co_disc) < 1e-9;
+    cell.accept = has ? el("button", { type: "button", class: `pbtn small ${accepted ? "on" : "primary"}`, text: accepted ? `✓ ${t("accept")}` : t("accept"),
+      onclick: () => save(a, it, { fb1_disc: String(+(it.co_disc * 100).toFixed(4)).replace(".", ",") }, true) }) : el("span");
+    const own = tinput(a, it, "own", "fb1_disc", { inputmode: "decimal", "aria-label": t("h_own") }, discValue, (v) => (v == null ? "" : discShow(v)));
+    own.disabled = !has;
+    own.addEventListener("input", () => { own.value = own.value.replace(/[^\d.,]/g, ""); });
+    cell.own = el("div", { class: "affix" }, own, el("span", { text: "%" }));
+    cell.unit = el("b", { class: "tc-unit", text: has ? rp(it.fb1_unit_price) : "—" });
+  }
+  put(a, el("div", { class: `tcells tc-${step}` }, TCOLS[step].map((c) => el("div", { class: `td td-${c}`, role: "cell" }, cell[c]))), el("div", { class: "issues" }));
+  paintIssues(a, it);
+  return a;
+}
+
+// Enter moves down the same column, like a sheet.
+function tableKeys(e) {
+  if (e.key !== "Enter" || e.target.tagName !== "INPUT") return;
+  e.preventDefault();
+  e.target.dispatchEvent(new Event("change"));
+  const col = e.target.dataset.col, row = e.target.closest(".trow");
+  for (let r = row && row.nextElementSibling; r; r = r.nextElementSibling) {
+    const n = r.classList.contains("trow") && r.querySelector(`input[data-col="${col}"]:not([disabled])`);
+    if (n) { n.focus(); n.select(); return; }
+  }
+}
+
+// Pasting several cells copied from Excel fills across and down from the focused cell.
+function tablePaste(e) {
+  const target = e.target;
+  if (target.tagName !== "INPUT" || !target.dataset.col) return;
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  if (!/[\t\n]/.test(text.replace(/\r?\n$/, ""))) return;
+  e.preventDefault();
+  const grid = text.replace(/\r?\n$/, "").split(/\r?\n/).map((r) => r.split("\t"));
+  let row = target.closest(".trow");
+  const cols = [...row.querySelectorAll("input[data-col]")].map((i) => i.dataset.col);
+  const c0 = cols.indexOf(target.dataset.col);
+  for (const cells of grid) {
+    if (!row) break;
+    cells.forEach((v, j) => {
+      const i = row.querySelector(`input[data-col="${cols[c0 + j]}"]:not([disabled])`);
+      if (!i) return;
+      i.value = v.trim();
+      i.dispatchEvent(new Event("input"));
+      i.dispatchEvent(new Event("change"));
+    });
+    do { row = row.nextElementSibling; } while (row && !row.classList.contains("trow"));
+  }
+}
+
+// ---------- help ----------
+function openHelp() {
+  const h = (P.me && P.me.help) || {};
+  const steps = P.me && P.me.step ? t(`howto.${P.me.step}`) : [];
+  const wa = String(h.whatsapp || "").replace(/[^\d]/g, "");
+  const links = [wa ? el("a", { class: "pbtn primary", href: `https://wa.me/${wa}`, target: "_blank", rel: "noopener", text: t("help_wa") }) : null,
+    h.email ? el("a", { class: "pbtn", href: `mailto:${h.email}`, text: t("help_mail") }) : null].filter(Boolean);
+  put(clear($("dlg-body")), el("h2", { text: t("help_t") }),
+    steps.length ? el("ol", { class: "howto" }, steps.map((x) => el("li", { text: x }))) : null,
+    el("p", { text: links.length ? t("help_p") : t("help_none") }),
+    el("div", { class: "pactions" }, ...links, el("button", { type: "button", class: "pbtn", text: t("close"), onclick: () => $("dlg").close() })));
+  $("dlg").showModal();
 }
 
 // ---------- one SKU ----------
@@ -428,11 +585,11 @@ async function save(a, it, changes, rerender = false, confirmCode = null) {
     Object.assign(it, fresh);
     const statusChanged = "item_status" in changes;
     if (rerender || statusChanged) {
-      const next = card(it);
+      const next = a.classList.contains("trow") ? trow(it) : card(it);
       a.replaceWith(next);
       a = next;
     } else {
-      a.className = `sku st-${it.state}`;
+      a.className = a.className.replace(/\bst-\w+/, `st-${it.state}`);
       const s = a.querySelector(".state"); s.className = `state s-${it.state}`; s.textContent = t(`state.${it.state}`);
       paintIssues(a, it);
     }
