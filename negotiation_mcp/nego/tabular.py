@@ -44,6 +44,10 @@ SYNONYMS: dict[str, tuple[str, ...]] = {
     "contact_phone": ("contact phone", "phone", "whatsapp", "wa", "no hp", "no wa", "pic phone", "telepon"),
     "category": ("category", "kategori", "item category", "class"),
     "name": ("name", "principal", "principal name", "prinsipal", "vendor", "vendor name"),
+    "generic_name": ("generic name", "generic", "nama generik", "generik", "active ingredient", "zat aktif", "molecule",
+                     "bahan aktif", "inn"),
+    "group_key": ("group", "equivalence group", "item group", "grup", "kelompok", "grup ekuivalen", "therapeutic group"),
+    "tags": ("tags", "tag", "labels", "label", "tagging"),
 }
 
 

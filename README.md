@@ -275,6 +275,12 @@ the principal or distributor name in the price data).
 **Admin**
 - **Price data:** upload a CSV or Excel file, see a row-checked preview, then *add* or
   *replace*. Every apply is a new version with one-click rollback.
+- **Master data:** every set in one view (items, principals, negotiations, benchmarks, price data)
+  with counts and what needs review. Every item code that enters a negotiation is registered as
+  **New**; an admin gives it a *generic name* (so different brands of the same medicine can be
+  compared), an optional *group* and *tags*, singly, in bulk, or by importing any Excel/CSV (headers
+  are matched by synonym, English or Indonesian; blank cells never erase a label). Export gives the
+  same sheet back.
 - **Documents:** PDF, Word, Excel, CSV or image files, linked to a vendor, product or renewal.
 - **Engine settings:** margins, WACC, rebate breakage (D-18), the renewal window and alert
   thresholds. They're shared with the MCP server.

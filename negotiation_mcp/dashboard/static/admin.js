@@ -6,10 +6,10 @@
 const adminState = { sub: "data", staged: null };
 
 function adminEnter(sub) {
-  adminState.sub = ["data", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
+  adminState.sub = ["data", "master", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
   document.querySelectorAll("#admin-subtabs a").forEach((a) => a.classList.toggle("on", a.dataset.sub === adminState.sub));
   const body = clear($("admin-body"));
-  return ({ data: adminData, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
+  return ({ data: adminData, master: adminMaster, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
 }
 
 function card(title, sub, ...kids) {
