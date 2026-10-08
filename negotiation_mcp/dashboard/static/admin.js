@@ -278,7 +278,7 @@ async function adminSettings(body) {
 async function adminUsers(body) {
   const email = el("input", { id: "u-email", type: "email", placeholder: "name@siloamhospitals.com", required: "" });
   const name = el("input", { id: "u-name", placeholder: "Full name", required: "" });
-  const role = el("select", { id: "u-role" }, el("option", { value: "viewer", text: "Viewer: sees everything, updates renewals" }),
+  const role = el("select", { id: "u-role" }, el("option", { value: "viewer", text: "Viewer: sees everything, updates renewals" }), el("option", { value: "negotiator", text: "Negotiator: runs negotiations (prices, counter offers, anomalies, principal links)" }),
     el("option", { value: "admin", text: "Admin: also uploads data, tunes the engine, manages users" }));
   const msg = el("p", { class: "small", role: "status" });
   const form = el("form", { class: "row3" },
@@ -307,7 +307,7 @@ async function adminUsers(body) {
     { label: "Name", get: (u) => u.name },
     { label: "Email", get: (u) => u.email },
     { label: "Role", get: (u) => {
-      const s = el("select", { "aria-label": `Role for ${u.name}` }, el("option", { value: "viewer", text: "Viewer" }), el("option", { value: "admin", text: "Admin" }));
+      const s = el("select", { "aria-label": `Role for ${u.name}` }, el("option", { value: "viewer", text: "Viewer" }), el("option", { value: "negotiator", text: "Negotiator" }), el("option", { value: "admin", text: "Admin" }));
       s.value = u.role;
       s.addEventListener("change", () => patch(u, { role: s.value }, `${u.name} is now ${s.value}`));
       return s;

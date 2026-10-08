@@ -227,7 +227,7 @@ async def user_update(request: Request) -> Response:
     try:
         body = await request.json()
         uid = int(request.path_params["uid"])
-        if uid == request.state.user["id"] and (body.get("role") == "viewer" or body.get("active") is False):
+        if uid == request.state.user["id"] and (body.get("role", "admin") != "admin" or body.get("active") is False):
             raise EngineError("You can't remove your own admin access; ask another admin")
         return ok(appdb.safe_user(appdb.update_user(uid, _who(request), role=body.get("role"), active=body.get("active"),
                                                     name=body.get("name"))))

@@ -26,7 +26,7 @@ function renderHeader() {
   $("admin-tab").hidden = !(u && u.role === "admin");
   if (u) {
     $("who-name").textContent = u.name;
-    $("who-role").textContent = u.role === "admin" ? "Admin" : "Viewer";
+    $("who-role").textContent = { admin: "Administrator", negotiator: "Negotiator" }[u.role] || "Viewer";
     $("who-initials").textContent = initials(u.name);
   }
 }
