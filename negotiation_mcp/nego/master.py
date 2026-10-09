@@ -92,6 +92,18 @@ def list_items(filter_: str = "all", q: str = "", offset: int = 0, limit: int = 
     return {"total": total, "items": [dict(r) for r in rows], "counts": counts()}
 
 
+def group_map() -> dict[str, tuple[str, str]]:
+    """ERP code (lower case) -> (group key, label), for every item with a group or a generic name.
+    The group wins over the generic name; the key ignores case and extra spaces."""
+    out: dict[str, tuple[str, str]] = {}
+    with store.connect() as con:
+        for r in con.execute("SELECT erp_code, group_key, generic_name FROM item_master"):
+            label = " ".join(str(r["group_key"] or r["generic_name"] or "").split())
+            if label:
+                out[r["erp_code"].lower()] = (label.casefold(), label)
+    return out
+
+
 def get(erp_code: str) -> dict | None:
     with store.connect() as con:
         r = con.execute("SELECT * FROM item_master WHERE erp_code = ?", (_code(erp_code),)).fetchone()

@@ -234,7 +234,7 @@ async function ngCycle(cid, tab) {
     ng.page = { q: "", filter: "all", sort: "sort", offset: 0 };
   }
   ng.cid = cid;
-  ng.tab = ["items", "findings", "negotiate", "files", "activity"].includes(tab) ? tab : "items";
+  ng.tab = ["items", "findings", "brands", "negotiate", "files", "activity"].includes(tab) ? tab : "items";
   try { ng.ov = await api(`/api/nego/cycles/${cid}`); } catch (e) { clear(page).append(el("p", { class: "error pad", text: e.message }), el("a", { href: "#nego", text: "← All principals" })); return; }
   renderCycle();
 }
@@ -248,7 +248,7 @@ function renderCycle() {
   const page = clear($("nego"));
   const c = ng.ov.cycle;
   const tabs = el("nav", { class: "subtabs", "aria-label": "Negotiation sections" },
-    [["items", "Items"], ["findings", "Findings"], ["negotiate", "Negotiate"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
+    [["items", "Items"], ["findings", "Findings"], ["brands", "Brands"], ["negotiate", "Negotiate"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
       el("a", { href: `#nego/${c.id}/${k}`, class: ng.tab === k ? "on" : null, "data-tab": k }, label, k === "findings" ? el("span", { class: "count", id: "ng-find-count" }) : null)));
   page.append(
     el("a", { class: "back", href: "#nego", text: "← All principals" }),
@@ -267,7 +267,7 @@ function renderCycle() {
     tabs,
     el("div", { id: "ng-body" }));
   renderHeaderParts();
-  ({ items: renderItems, findings: renderFindings, negotiate: renderNegotiate, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
+  ({ items: renderItems, findings: renderFindings, brands: renderBrands, negotiate: renderNegotiate, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
 }
 
 function renderHeaderParts() {
@@ -794,6 +794,36 @@ async function linkPanel(c) {
     el("form", { class: "progress-form", onsubmit: (e) => e.preventDefault() }, field("Valid for (days)", days), el("div", { class: "actions" }, create)),
     out, el("h3", { text: "Links" }), list);
   try { draw((await api(`/api/admin/nego/cycles/${c.id}/links`)).links); } catch (e) { list.append(el("p", { class: "error", text: e.message })); }
+}
+
+// ---------- brands: the same generic from different brands, side by side ----------
+async function renderBrands(body) {
+  clear(body);
+  put(body, el("p", { class: "muted pad", text: "Comparing brands…" }));
+  let d;
+  try { d = await api(`/api/nego/cycles/${ng.cid}/groups`); } catch (e) { put(clear(body), el("p", { class: "error pad", text: e.message })); return; }
+  const stage = { rfq: "RFQ", co: "Counter offer", fb1: "Feedback I", on: "Online nego", mou: "MOU", po: "Last PO" };
+  const groupCard = (g) => card(`${g.label}`, `${g.members.length} items · cheapest ${unit(g.cheapest.price)}/pc · highest is ${pct(g.spread, 0)} above${g.potential_saving ? ` · ${money(g.potential_saving)} a year if the dearer ones matched the cheapest` : ""}`,
+    el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ["Item", "Brand", "Price/pc incl. PPN", "Basis", "Above cheapest", "Annual pieces", "Extra cost a year"].map((h, i) => el("th", { class: i >= 2 && i !== 3 ? "num" : null, text: h })))),
+      el("tbody", {}, g.members.map((m, i) => el("tr", { class: i === 0 ? "best" : null },
+        el("td", {}, el("b", { text: m.item_name || "—" }), el("div", { class: "small muted", text: m.erp_code || "" })),
+        el("td", { text: m.brand || "—" }),
+        el("td", { class: "num", text: unit(m.price) }),
+        el("td", { text: stage[m.stage] || "—" }),
+        el("td", { class: "num", text: i === 0 ? "Cheapest" : `+${pct(m.gap, 1)}` }),
+        el("td", { class: "num", text: m.annual_pcs ? num(m.annual_pcs) : "—" }),
+        el("td", { class: "num", text: i === 0 || m.extra_cost == null ? "—" : money(m.extra_cost) })))))));
+  const flagged = d.groups.filter((g) => g.flagged), rest = d.groups.filter((g) => !g.flagged);
+  put(clear(body),
+    card("Same medicine, different brands", `Items with the same generic name or group (set in Admin > Master data) compared per piece including PPN. A brand is flagged when it costs ${pct(d.spread_threshold, 0)} or more above the cheapest. Principals never see this.`,
+      el("div", { class: "facts" }, [["Groups compared", d.groups.length], ["Flagged", d.flagged], ["Possible saving a year", d.potential_saving ? money(d.potential_saving) : "—"],
+        ["Items in a group", d.grouped_items], ["Items with no generic name yet", d.ungrouped_items]].map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: typeof v === "number" ? num(v) : v })))),
+      d.ungrouped_items ? el("p", { class: "small muted", text: isAdmin() ? "Label more items in Admin > Master data to compare more." : "An admin labels items in Admin > Master data." }) : null,
+      isAdmin() && d.ungrouped_items ? act("Open master data", () => { location.hash = "#admin/master"; }, "secondary") : null),
+    d.groups.length ? null : el("p", { class: "muted pad", text: "No group has two or more priced items yet." }),
+    flagged.map(groupCard),
+    rest.length ? el("details", {}, el("summary", { text: `${rest.length} groups within ${pct(d.spread_threshold, 0)}` }), rest.map(groupCard)) : null);
 }
 
 // ---------- negotiate: counter offer, benchmarks, online nego, package ----------

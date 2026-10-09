@@ -275,6 +275,11 @@ the principal or distributor name in the price data).
 **Admin**
 - **Price data:** upload a CSV or Excel file, see a row-checked preview, then *add* or
   *replace*. Every apply is a new version with one-click rollback.
+- **Brands tab (per negotiation):** items with the same generic name or group are compared per
+  piece including PPN: cheapest brand, each other brand's gap, and the yearly cost of the gap. A
+  brand above the cheapest by more than *Price above the cheapest equivalent brand that raises a
+  flag* (default 20%) also appears in Findings as "Above cheapest equivalent brand". Principals
+  never see it.
 - **Master data:** every set in one view (items, principals, negotiations, benchmarks, price data)
   with counts and what needs review. Every item code that enters a negotiation is registered as
   **New**; an admin gives it a *generic name* (so different brands of the same medicine can be

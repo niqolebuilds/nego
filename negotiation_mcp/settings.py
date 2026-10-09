@@ -77,6 +77,8 @@ SETTINGS: tuple[Setting, ...] = (
             0.25, "fraction", 0, 0.9, "Keeps the counter credible; anything beyond goes to Online Nego."),
     Setting("anomaly_benchmark_deviation", "Price above the market benchmark that raises a flag", "Principal negotiations", 0.05,
             "fraction", 0, 1),
+    Setting("anomaly_group_spread", "Price above the cheapest equivalent brand that raises a flag", "Principal negotiations", 0.20,
+            "fraction", 0, 5, "Items with the same generic name or group (Admin > Master data) are compared per piece."),
     Setting("escalation_impact", "Escalate when agreed prices cost more than the MOU by (Rp a year)", "Principal negotiations", 0,
             "number", 0, 1e13, "0 = any net increase needs sign-off."),
     Setting("reminders_on", "Send deadline reminders to principals", "Principal negotiations", True, "bool",

@@ -14,7 +14,7 @@ from ..engine import EngineError
 from . import anomalies as A
 from . import model as M
 from . import prepare as P
-from . import store, template_io
+from . import groups, store, template_io
 from .impact import enrich, summary
 
 
@@ -26,7 +26,7 @@ def thresholds() -> dict:
     v = S.load()
     return {"increase_tolerance": v["anomaly_increase_tolerance"], "po_deviation": v["anomaly_po_deviation"],
             "outlier_z": v["anomaly_outlier_z"], "review_top_n": v["anomaly_review_top_n"],
-            "benchmark_deviation": v["anomaly_benchmark_deviation"]}
+            "benchmark_deviation": v["anomaly_benchmark_deviation"], "group_spread": v["anomaly_group_spread"]}
 
 
 def months_between(today: date, end: date) -> float:
@@ -103,7 +103,8 @@ def steps() -> list[dict]:
 
 def scan(cid: int) -> dict:
     c = store.require_cycle(cid)
-    findings = A.scan(store.items(cid), c["current_step"], ppn(), thresholds(), store.best_benchmarks(cid))
+    items, th = store.items(cid), thresholds()
+    findings = A.scan(items, c["current_step"], ppn(), th, store.best_benchmarks(cid), groups.expensive_items(items, ppn(), th["group_spread"]))
     res = store.sync_anomalies(cid, findings)
     return res
 

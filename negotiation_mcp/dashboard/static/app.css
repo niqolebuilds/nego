@@ -240,3 +240,4 @@
 .mtable td input:not([type=checkbox]) { width: 100%; min-width: 100px; box-sizing: border-box; }
 .mtable .mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .msaved { display: block; min-height: 16px; }
+tr.best td { background: color-mix(in srgb, var(--positive-bg) 35%, transparent); }

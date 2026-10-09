@@ -34,7 +34,7 @@ DISC_FIELDS = ("mou_disc", "rfq_disc", "co_disc", "fb1_disc", "on_disc")
 AFTER_RFQ = {"counter_offer", "feedback1", "online_nego", "submission", "closed"}
 ADMIN_DISC_FOR_STEP = {"online_nego": "on_disc", "submission": "on_disc", "closed": "on_disc"}
 
-DEFAULTS = {"increase_tolerance": 0.005, "po_deviation": 0.10, "outlier_z": 3.5, "review_top_n": 3, "benchmark_deviation": 0.05}
+DEFAULTS = {"increase_tolerance": 0.005, "po_deviation": 0.10, "outlier_z": 3.5, "review_top_n": 3, "benchmark_deviation": 0.05, "group_spread": 0.20}
 
 
 def _f(label: str, value: float) -> str:
@@ -42,7 +42,7 @@ def _f(label: str, value: float) -> str:
 
 
 def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, thresholds: dict | None = None,
-         benchmarks: dict | None = None) -> list[dict]:
+         benchmarks: dict | None = None, groups: dict | None = None) -> list[dict]:
     th = {**DEFAULTS, **(thresholds or {})}
     out: list[dict] = []
 
@@ -149,6 +149,14 @@ def scan(items: list[dict], step: str = "prepare", ppn: float = M.DEFAULT_PPN, t
                 f"{latest / bm['price_pp'] - 1:+.1%} above the {bm['source']} benchmark ({bm['price_pp']:,.0f}/pc, {bm['name'][:60]}).",
                 detail={"benchmark": bm["price_pp"], "source": bm["source"]})
 
+        g = (groups or {}).get(raw.get("id"))
+        if g:
+            add(raw, "above_equivalent", "medium",
+                f"{g['gap']:+.1%} above the cheapest equivalent in {g['label']}: {g['cheapest_name'][:50]}"
+                f"{' (' + g['cheapest_brand'] + ')' if g['cheapest_brand'] else ''} at {g['cheapest_price']:,.0f}/pc "
+                f"against {g['price']:,.0f}/pc here.",
+                detail={"group": g["label"], "cheapest_price": g["cheapest_price"], "cheapest_code": g["cheapest_code"]})
+
         # list problems
         if raw.get("item_status") == "Discontinue" and (raw.get("rfq_hna") is not None or raw.get("on_disc") is not None):
             add(raw, "discontinued_priced", "low", "Marked Discontinue but has a price. It will be left out of the BAK unless "
@@ -199,6 +207,7 @@ RULE_LABELS = {
     "rfq_missing": "No RFQ price",
     "extreme_change": "Largest / smallest change",
     "above_benchmark": "Above market benchmark",
+    "above_equivalent": "Above cheapest equivalent brand",
 }
 
 
