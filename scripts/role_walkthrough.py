@@ -47,6 +47,8 @@ def seed() -> dict:
     appdb.create_user("negotiator@walk.test", "Nico Negotiator", "negotiator", "walk")
     cid = 2  # PT Farmasi Sejahtera: items prepared, not yet quoted
     store.set_step(cid, "rfq", "walk")
+    for it in [i for i in store.items(cid) if i.get("mou_hna")][:3]:  # a few quoted increases, so findings exist to act on
+        store.update_item(cid, it["id"], {"rfq_qty": it["mou_qty"], "rfq_hna": it["mou_hna"] * 1.3, "rfq_disc": it["mou_disc"] or 0}, "walk")
     service.scan(cid)
     return {"cid": cid, "link": portal.create_link(cid, "walk")["path"]}
 
@@ -84,6 +86,10 @@ def walk_staff(pw, base: str, ctx: dict) -> dict:
         screens["Files & prepare: buttons"] = texts(page, "#ng-body button.act, #ng-body a.act")
         page.goto(f"{base}/#admin/master"); page.wait_for_timeout(1200)
         screens["Admin area: sections"] = texts(page, "#admin-subtabs a") if page.is_visible("#admin-subtabs") else []
+        screens["Master data: what can be done"] = (["Read items and groups"] if page.locator(".mtable").count() else []) \
+            + (["Edit generic name, group, tags"] if page.locator(".mtable input:not([type=checkbox])").count() else []) \
+            + (["Select rows for bulk labelling"] if page.locator(".mtable tbody input[type=checkbox]").count() else []) \
+            + texts(page, "#mchips ~ a.act, #mchips ~ label.act")
         screens["Opening #admin lands on"] = [page.evaluate("location.hash")]
         found[role] = screens
         b.close()

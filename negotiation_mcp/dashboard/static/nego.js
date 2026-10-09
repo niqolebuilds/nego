@@ -819,8 +819,8 @@ async function renderBrands(body) {
     card("Same medicine, different brands", `Items with the same generic name or group (set in Admin > Master data) compared per piece including PPN. A brand is flagged when it costs ${pct(d.spread_threshold, 0)} or more above the cheapest. Principals never see this.`,
       el("div", { class: "facts" }, [["Groups compared", d.groups.length], ["Flagged", d.flagged], ["Possible saving a year", d.potential_saving ? money(d.potential_saving) : "—"],
         ["Items in a group", d.grouped_items], ["Items with no generic name yet", d.ungrouped_items]].map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: typeof v === "number" ? num(v) : v })))),
-      d.ungrouped_items ? el("p", { class: "small muted", text: isAdmin() ? "Label more items in Admin > Master data to compare more." : "An admin labels items in Admin > Master data." }) : null,
-      isAdmin() && d.ungrouped_items ? act("Open master data", () => { location.hash = "#admin/master"; }, "secondary") : null),
+      d.ungrouped_items ? el("p", { class: "small muted", text: isAdmin() ? "Label more items in Admin > Master data to compare more." : "An admin labels items in Master data." }) : null,
+      canWork() && d.ungrouped_items ? act("Open master data", () => { location.hash = "#admin/master"; }, "secondary") : null),
     d.groups.length ? null : el("p", { class: "muted pad", text: "No group has two or more priced items yet." }),
     flagged.map(groupCard),
     rest.length ? el("details", {}, el("summary", { text: `${rest.length} groups within ${pct(d.spread_threshold, 0)}` }), rest.map(groupCard)) : null);

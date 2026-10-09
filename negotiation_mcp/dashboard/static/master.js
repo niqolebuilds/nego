@@ -5,6 +5,8 @@
 
 const master = { filter: "new", q: "", items: [], total: 0, counts: {}, picked: new Set(), loading: false };
 
+const masterReadOnly = () => !shell.user || shell.user.role !== "admin";
+
 async function adminMaster(body) {
   const sets = el("div", { class: "mset" });
   const tools = el("div", { class: "mtools" });
@@ -13,8 +15,8 @@ async function adminMaster(body) {
   const more = el("div", { class: "actions" });
   const importBox = el("div");
   body.append(
-    card("Master data", "Everything the engine and the negotiations are built on. New data shows up here for review.", sets),
-    card("Items", "One row per ERP code. Give each item a generic name so different brands of the same medicine can be compared. Items from new negotiations arrive as “New”.",
+    card("Master data", masterReadOnly() ? "Everything the engine and the negotiations are built on. You can read it; an administrator changes it." : "Everything the engine and the negotiations are built on. New data shows up here for review.", sets),
+    card("Items", masterReadOnly() ? "One row per ERP code, with the generic name and group that the Brands comparison uses." : "One row per ERP code. Give each item a generic name so different brands of the same medicine can be compared. Items from new negotiations arrive as “New”.",
       tools, bulk, list, more),
     importBox);
   master.picked = new Set();
@@ -28,7 +30,7 @@ async function adminMaster(body) {
   file.addEventListener("change", () => { if (file.files.length) checkImport(importBox, file); });
   put(tools, el("div", { class: "chips", id: "mchips" }), search,
     el("a", { class: "act secondary", href: "/api/admin/master/items.xlsx", text: "Export Excel" }),
-    el("label", { class: "act secondary", for: "mfile", text: "Import Excel or CSV" }), file);
+    masterReadOnly() ? null : el("label", { class: "act secondary", for: "mfile", text: "Import Excel or CSV" }), masterReadOnly() ? null : file);
 
   master.draw = () => drawItems(list, more, bulk);
   master.refreshSets = () => drawSets(sets);
@@ -76,10 +78,11 @@ function drawItems(list, more, bulk) {
     drawBulk(bulk);
     return;
   }
+  const ro = masterReadOnly();
   const all = el("input", { type: "checkbox", "aria-label": "Select all shown" });
   all.checked = master.items.every((i) => master.picked.has(i.erp_code));
   all.addEventListener("change", () => { master.items.forEach((i) => (all.checked ? master.picked.add(i.erp_code) : master.picked.delete(i.erp_code))); master.draw(); });
-  const tbl = el("table", { class: "mtable" }, el("thead", {}, el("tr", {}, el("th", {}, all),
+  const tbl = el("table", { class: "mtable" }, el("thead", {}, el("tr", {}, el("th", {}, ro ? null : all),
     ["ERP code", "Item", "Brand", "Generic name", "Group", "Tags", ""].map((h) => el("th", { text: h })))));
   const tb = el("tbody");
   for (const it of master.items) tb.append(itemRow(it));
@@ -92,10 +95,12 @@ function drawItems(list, more, bulk) {
 function itemRow(it) {
   const pick = el("input", { type: "checkbox", "aria-label": `Select ${it.erp_code}` });
   pick.checked = master.picked.has(it.erp_code);
+  const ro = masterReadOnly();
   pick.addEventListener("change", () => { pick.checked ? master.picked.add(it.erp_code) : master.picked.delete(it.erp_code); drawBulk(document.querySelector(".mbulk")); });
   const status = el("span", { class: `badge ${it.status === "new" ? "" : "ok"}`, text: it.status === "new" ? "New" : "Reviewed" });
   const saved = el("span", { class: "small muted msaved" });
   const input = (field, label) => {
+    if (ro) return el("span", { text: it[field] || "—" });
     const i = el("input", { value: it[field] || null, "aria-label": `${label} for ${it.erp_code}`, maxlength: field === "tags" ? 300 : 120 });
     i.addEventListener("change", async () => {
       saved.textContent = "Saving…";
@@ -110,15 +115,15 @@ function itemRow(it) {
     });
     return i;
   };
-  return el("tr", {}, el("td", {}, pick), el("td", { class: "mono", text: it.erp_code }),
+  return el("tr", {}, el("td", {}, ro ? null : pick), el("td", { class: "mono", text: it.erp_code }),
     el("td", {}, el("b", { text: it.item_name || "—" }), it.catalog_no ? el("div", { class: "small muted", text: `REF ${it.catalog_no}` }) : null),
     el("td", { text: it.brand || "—" }),
     el("td", {}, input("generic_name", "Generic name")), el("td", {}, input("group_key", "Group")), el("td", {}, input("tags", "Tags")),
-    el("td", {}, status, saved));
+    el("td", {}, status, ro ? null : saved));
 }
 
 function drawBulk(box) {
-  if (!box) return;
+  if (!box || masterReadOnly()) return;
   clear(box);
   const n = master.picked.size;
   box.hidden = !n;

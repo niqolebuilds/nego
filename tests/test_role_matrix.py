@@ -48,15 +48,18 @@ PROBES = [
     ("GET", "/api/admin/nego/cycles/{cid}/documents/{n}", None, (0, 0, 0, 1, 1)),
     ("GET", "/api/admin/nego/notify", None, (0, 0, 0, 1, 1)),
     ("GET", "/api/admin/nego/assist", None, (0, 0, 0, 1, 1)),
-    # master data, settings, people: administrators only
+    # master data (read), settings, people
     ("POST", "/api/admin/nego/principals", {}, (0, 0, 0, 0, 1)),
     ("POST", "/api/admin/nego/cycles", {}, (0, 0, 0, 0, 1)),
     ("POST", "/api/admin/nego/cycles/{cid}/prepare", {}, (0, 0, 0, 0, 1)),
     ("POST", "/api/admin/nego/cycles/{cid}/import", {}, (0, 0, 0, 0, 1)),
     ("PATCH", "/api/admin/nego/cycles/{cid}", {}, (0, 0, 0, 0, 1)),
-    ("GET", "/api/admin/master/overview", None, (0, 0, 0, 0, 1)),
-    ("GET", "/api/admin/master/items", None, (0, 0, 0, 0, 1)),
-    ("POST", "/api/admin/master/items/bulk", {}, (0, 0, 0, 0, 1)),
+    ("GET", "/api/admin/master/overview", None, (0, 0, 0, 1, 1)),  # master data: negotiators read it...
+    ("GET", "/api/admin/master/items", None, (0, 0, 0, 1, 1)),
+    ("GET", "/api/admin/master/items.xlsx", None, (0, 0, 0, 1, 1)),
+    ("POST", "/api/admin/master/items/bulk", {}, (0, 0, 0, 0, 1)),  # ...and only admins change it
+    ("POST", "/api/admin/master/items/import", {}, (0, 0, 0, 0, 1)),
+    ("PATCH", "/api/admin/master/items/{n}", {}, (0, 0, 0, 0, 1)),
     ("GET", "/api/admin/uploads", None, (0, 0, 0, 0, 1)),
     ("GET", "/api/admin/versions", None, (0, 0, 0, 0, 1)),
     ("PUT", "/api/admin/settings", {}, (0, 0, 0, 0, 1)),

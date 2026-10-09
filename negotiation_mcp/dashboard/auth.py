@@ -126,8 +126,10 @@ def current_user(request: Request) -> dict | None:
 # What a negotiator may do under /api/admin: run a negotiation (prices, counter offers, anomalies,
 # benchmarks, principal links and messages, the package), but not change master data: principals,
 # opening or preparing a negotiation, uploads and price data, users, settings, notification setup.
+# They may read master data (what the brand comparison is built on) but not change it.
 NEGOTIATOR_PATHS = re.compile(
-    r"^/api/admin/nego/(?:notify|assist)$"
+    r"^/api/admin/master/(?:overview|items|items\.xlsx)$"  # read-only; the label, bulk and import routes stay admin-only
+    r"|^/api/admin/nego/(?:notify|assist)$"
     r"|^/api/admin/nego/cycles/[^/]+/(?:items/\d+|scan|step|anomalies/\d+|links|links/send|links/\d+/revoke|messages|messages/\d+/retry"
     r"|assist|benchmarks/match|benchmarks/\d+|co|on-fill|package\.xlsx|documents|documents/\d+)$")
 

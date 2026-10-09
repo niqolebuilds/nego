@@ -6,6 +6,9 @@
 const adminState = { sub: "data", staged: null };
 
 function adminEnter(sub) {
+  const nego = shell.user && shell.user.role === "negotiator";  // read-only master data, nothing else
+  if (nego) sub = "master";
+  $("admin-subtabs").hidden = nego;
   adminState.sub = ["data", "master", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
   document.querySelectorAll("#admin-subtabs a").forEach((a) => a.classList.toggle("on", a.dataset.sub === adminState.sub));
   const body = clear($("admin-body"));

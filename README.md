@@ -224,8 +224,8 @@ It's a web app on 127.0.0.1 that makes no external requests, so it works on a ho
 - **Viewers** can see everything and update renewal progress.
 - **Negotiators** also run negotiations: edit item prices, set counter offers and the online-negotiation
   discount, decide anomalies, match benchmarks, send principal links and messages, move a negotiation
-  between steps and download the package. They can't change master data (principals, opening or
-  preparing a negotiation, price uploads), settings or users. They see everyone's negotiations.
+  between steps and download the package. They can read master data (the Master data page, read-only) but can't change it,
+  nor principals, opening or preparing a negotiation, price uploads, settings or users. They see everyone's negotiations.
 - **Admins** can do all of that, and also:
   - upload price lists, records and documents
   - roll data back

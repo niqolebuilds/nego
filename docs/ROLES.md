@@ -13,6 +13,7 @@ Viewer: reads everything and updates renewal progress. Negotiator: also runs a n
 |---|:-:|:-:|:-:|
 | Admin | — | — | ✓ |
 | Assistant | ✓ | ✓ | ✓ |
+| Master data | — | ✓ | — |
 | Negotiations | ✓ | ✓ | ✓ |
 | Renewals | ✓ | ✓ | ✓ |
 
@@ -31,7 +32,7 @@ Viewer: reads everything and updates renewal progress. Negotiator: also runs a n
 | Activity | ✓ | ✓ | ✓ |
 | Brands | ✓ | ✓ | ✓ |
 | Files & prepare | ✓ | ✓ | ✓ |
-| Findings | ✓ | ✓ | ✓ |
+| Findings6 | ✓ | ✓ | ✓ |
 | Items | ✓ | ✓ | ✓ |
 | Negotiate | ✓ | ✓ | ✓ |
 
@@ -51,18 +52,25 @@ Viewer: reads everything and updates renewal progress. Negotiator: also runs a n
 
 | Shown | Viewer | Negotiator | Admin |
 |---|:-:|:-:|:-:|
+| Fixed it | — | ✓ | ✓ |
+| Keep as is… | — | ✓ | ✓ |
+| Mark fixed | — | ✓ | ✓ |
+| Open item | ✓ | ✓ | ✓ |
 | Rescan now | — | ✓ | ✓ |
+| Set CO_Disc% to 23.08% | — | ✓ | ✓ |
+| Set CO_Disc% to 34.62% | — | ✓ | ✓ |
 
 ### Brands: buttons
 
 | Shown | Viewer | Negotiator | Admin |
 |---|:-:|:-:|:-:|
-| Open master data | — | — | ✓ |
+| Open master data | — | ✓ | ✓ |
 
 ### Negotiate: buttons
 
 | Shown | Viewer | Negotiator | Admin |
 |---|:-:|:-:|:-:|
+| Apply 3 suggestions | — | ✓ | ✓ |
 | Fill agreed discounts (Feedback I, else counter offer) | — | ✓ | ✓ |
 | Import and match | — | — | ✓ |
 | Match again | — | — | ✓ |
@@ -87,12 +95,22 @@ Viewer: reads everything and updates renewal progress. Negotiator: also runs a n
 | Price data | — | — | ✓ |
 | Users | — | — | ✓ |
 
+### Master data: what can be done
+
+| Shown | Viewer | Negotiator | Admin |
+|---|:-:|:-:|:-:|
+| Edit generic name, group, tags | — | — | ✓ |
+| Export Excel | — | ✓ | ✓ |
+| Import Excel or CSV | — | — | ✓ |
+| Read items and groups | — | ✓ | ✓ |
+| Select rows for bulk labelling | — | — | ✓ |
+
 ### Opening #admin lands on
 
 | Shown | Viewer | Negotiator | Admin |
 |---|:-:|:-:|:-:|
-| #admin/master | — | — | ✓ |
-| #chat | ✓ | ✓ | — |
+| #admin/master | — | ✓ | ✓ |
+| #chat | ✓ | — | — |
 
 ## Vendor (principal link)
 

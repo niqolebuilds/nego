@@ -116,15 +116,17 @@ def test_export_round_trips_through_import(ws):
     assert (again["new"], again["changed"], again["unchanged"]) == (0, 0, 1)
 
 
-def test_routes_are_admin_only_and_work(ws):
+def test_routes_negotiators_read_admins_change(ws):
     open_cycle([{"erp_code": "P001", "item_name": "Paracetamol A"}])
     appdb.create_user("nina@example.com", "Nina", "negotiator", "t")
     app = create_app()
     nina = TestClient(app)
     nina.post("/api/auth/signin", json={"email": "nina@example.com"}, headers=H)
-    for method, path in [("get", "/api/admin/master/overview"), ("get", "/api/admin/master/items"), ("get", "/api/admin/master/items.xlsx"),
-                         ("patch", "/api/admin/master/items/P001"), ("post", "/api/admin/master/items/bulk"), ("post", "/api/admin/master/items/import")]:
-        assert getattr(nina, method)(path, headers=H, **({"json": {}} if method in ("patch", "post") else {})).status_code == 403, path
+    # a negotiator may read master data but not change it
+    for path in ("/api/admin/master/overview", "/api/admin/master/items", "/api/admin/master/items.xlsx"):
+        assert nina.get(path, headers=H).status_code == 200, path
+    for method, path in [("patch", "/api/admin/master/items/P001"), ("post", "/api/admin/master/items/bulk"), ("post", "/api/admin/master/items/import")]:
+        assert getattr(nina, method)(path, headers=H, json={}).status_code == 403, path
     admin = TestClient(app)
     admin.post("/api/auth/signin", json={"email": "admin@example.com"}, headers=H)
     ov = admin.get("/api/admin/master/overview").json()
