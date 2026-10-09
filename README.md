@@ -232,6 +232,8 @@ It's a web app on 127.0.0.1 that makes no external requests, so it works on a ho
   - tune the engine
   - manage users
   - read the activity log
+- **What each role sees, screen by screen** is in [docs/ROLES.md](docs/ROLES.md), generated from the
+  running app (`scripts/role_walkthrough.py`); `tests/test_role_matrix.py` checks every route against every role.
 - **The server enforces this on every request**, not just the page:
   - `/api` needs a session;
   - `/api/admin` needs the admin role;
