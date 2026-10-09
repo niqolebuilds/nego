@@ -46,6 +46,16 @@ Sponsorship is real value transferred and the engine quantifies it — but a ven
 quoting above market while sponsoring heavily is buying the price gap, and separating
 the ledgers is what makes that visible.
 
+## Try the prototype (no deployment)
+
+```bash
+python scripts/demo.py
+```
+
+Loads fictional sample data, creates one person per role (admin, negotiator, viewer) and a vendor link, and
+prints the addresses to open. It runs on your own computer only; stop it with Ctrl+C. Demo sign-in is email
+only, so never use it with real data. Data lives in `data/workspace-demo` (delete the folder to start fresh).
+
 ## Install
 
 ```bash
