@@ -557,3 +557,14 @@ market price feeds: the engine benchmarks against Siloam's own history and the
 vendors that quote to Siloam, not against other hospital groups. Those are 12
 of the 34 catalogue gaps and they are platform work. This server advises; it does not
 route, approve, or write to any system of record.
+
+## Open items
+
+- **Margin recalculation for outliers (open flag).** Anomaly detection flags outliers, and `impact.py` already
+  reports cost impact against the MOU price. Recalculating *margin* for an outlier needs a decision first:
+  whose margin (Siloam's selling margin or the vendor's), the formula, and where Siloam's selling price per
+  item comes from (it isn't in any data set yet; the natural home is a column in Admin > Master data).
+  Until that is decided the app shows no margin figure rather than a guessed one (`impact.summary()["margin"]`
+  is `None`).
+- **Inbound email.** Vendors can fill in the page, or download, fill and upload the Excel. Reading an Excel
+  they reply with by email, without opening the link, would need a mailbox connection and is not built.
