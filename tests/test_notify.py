@@ -12,6 +12,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from negotiation_mcp import appdb
+from negotiation_mcp import settings as S
 from negotiation_mcp.nego import notify, portal, service, store
 
 H = {"X-Requested-With": "nego"}
@@ -50,6 +51,9 @@ def env(tmp_path, monkeypatch):
     # The app's background sender (started by other tests' apps) mustn't race these tests,
     # which call deliver_due() themselves.
     monkeypatch.setattr(notify, "wake", lambda: None)
+    # Most tests here are about the messages themselves, so email and WhatsApp go together; the
+    # email-first behaviour has its own tests below, which set the delay.
+    S.save({"whatsapp_after_days": 0})
     yield stub
     stub.server.shutdown()
 
@@ -210,3 +214,102 @@ def test_weekly_mou_alert(env, monkeypatch):
     alert = [p for p, _, _ in env.received if p["event"] == "siloam.mou_alert"][0]
     assert [p["name"] for p in alert["principals"]] == ["PT Hampir Habis"]
     assert notify.daily(monday + timedelta(days=1))["mou_alert"] is None  # only on the set weekday
+
+
+# ---------------------------------------------------------------- email first, WhatsApp nudge
+
+def sent(env, event):
+    notify.deliver_due()
+    return [p for p, _, _ in env.received if p["event"] == event]
+
+
+def test_email_goes_first_then_one_whatsapp_nudge_with_the_same_link(env):
+    S.save({"whatsapp_after_days": 2})
+    c = cycle()
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    opened = sent(env, "principal.step_opened")[0]
+    assert opened["recipient"]["email"] == "tender@alfa.example" and opened["recipient"]["whatsapp"] is None
+    assert notify.daily(today)["nudges"] == 0
+    assert notify.daily(today + timedelta(days=1))["nudges"] == 0
+    assert notify.daily(today + timedelta(days=2))["nudges"] == 1
+    assert notify.daily(today + timedelta(days=2))["nudges"] == 0  # once
+    assert notify.daily(today + timedelta(days=3))["nudges"] == 0
+    nudge = sent(env, "principal.whatsapp_nudge")
+    assert len(nudge) == 1
+    n = nudge[0]
+    assert n["recipient"] == {"name": "Ibu Sari", "email": None, "whatsapp": "6281234567890"} and n["email"] is None
+    assert n["whatsapp"]["to"] == "6281234567890" and n["whatsapp"]["template"] == "siloam_nego_step_open"
+    assert n["link_token"] == opened["link_token"] and n["whatsapp"]["button_param"] == opened["link_token"]
+    assert portal.resolve(n["link_token"]) is not None
+
+
+def test_opening_the_link_restarts_the_wait(env):
+    S.save({"whatsapp_after_days": 2})
+    c = cycle()
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    notify.deliver_due()
+    used = (today + timedelta(days=1)).isoformat() + "T09:00:00+00:00"  # the principal opened the link a day later
+    with store.connect() as con:
+        con.execute("UPDATE principal_links SET last_used_at = ? WHERE cycle_id = ?", (used, c["id"]))
+    assert notify.daily(today + timedelta(days=2))["nudges"] == 0  # only one quiet day since it was opened
+    assert notify.daily(today + timedelta(days=3))["nudges"] == 1  # two quiet days
+
+
+def test_no_nudge_once_the_step_is_sent_or_when_it_is_siloams_turn(env):
+    S.save({"whatsapp_after_days": 1})
+    c = cycle()
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    notify.deliver_due()
+    store.mark_submitted(c["id"], "rfq", "vendor", {})
+    assert notify.daily(today + timedelta(days=5))["nudges"] == 0
+    service.set_step(c["id"], "counter_offer", "a@x")
+    assert notify.daily(today + timedelta(days=9))["nudges"] == 0
+
+
+def test_reminders_stay_email_only_until_the_nudge_then_use_both(env):
+    S.save({"whatsapp_after_days": 3})
+    c = cycle()
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True, due=(today + timedelta(days=1)).isoformat())
+    notify.deliver_due()
+    assert notify.daily(today)["reminders"] == 1  # H-1
+    first = sent(env, "principal.reminder")[0]
+    assert first["recipient"]["whatsapp"] is None and first["recipient"]["email"]
+    day = notify.daily(today + timedelta(days=3))  # overdue, and the nudge is due: nudge first, then the reminder
+    assert (day["nudges"], day["reminders"]) == (1, 1)
+    late = sent(env, "principal.reminder")[-1]
+    assert late["recipient"]["whatsapp"] == "6281234567890" and late["whatsapp"]["to"] == "6281234567890"
+
+
+def test_without_an_email_address_whatsapp_goes_straight_away(env):
+    S.save({"whatsapp_after_days": 2})
+    c = cycle(email="")
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    opened = sent(env, "principal.step_opened")[0]
+    assert opened["recipient"]["email"] is None and opened["recipient"]["whatsapp"] == "6281234567890"
+
+
+def test_a_missing_whatsapp_number_is_recorded_once_and_never_blocks(env):
+    S.save({"whatsapp_after_days": 1})
+    c = cycle(phone="")
+    today = date.today()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    notify.deliver_due()
+    assert notify.daily(today + timedelta(days=2))["nudges"] == 0
+    skipped = [m for m in store.messages(c["id"]) if m["event"] == "principal.whatsapp_nudge"]
+    assert len(skipped) == 1 and skipped[0]["status"] == "skipped"
+    notify.daily(today + timedelta(days=3))
+    assert len([m for m in store.messages(c["id"]) if m["event"] == "principal.whatsapp_nudge"]) == 1
+    assert not sent(env, "principal.whatsapp_nudge")
+
+
+def test_zero_days_keeps_email_and_whatsapp_together_and_sends_no_nudge(env):
+    S.save({"whatsapp_after_days": 0})
+    c = cycle()
+    service.set_step(c["id"], "rfq", "a@x", send_link=True)
+    opened = sent(env, "principal.step_opened")[0]
+    assert opened["recipient"]["email"] and opened["recipient"]["whatsapp"] == "6281234567890"
+    assert notify.daily(date.today() + timedelta(days=30))["nudges"] == 0

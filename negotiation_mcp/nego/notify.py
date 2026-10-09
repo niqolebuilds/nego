@@ -37,6 +37,7 @@ from . import portal, store
 
 EVENT_STEP_OPENED = "principal.step_opened"
 EVENT_REMINDER = "principal.reminder"
+EVENT_NUDGE = "principal.whatsapp_nudge"
 EVENT_SUBMITTED = "siloam.step_submitted"
 EVENT_MOU_ALERT = "siloam.mou_alert"
 EVENT_TEST = "test"
@@ -113,7 +114,23 @@ def _contacts(p: dict) -> tuple[str | None, str | None, str]:
     return email, wa, ", ".join(x for x in (email, f"+{wa}" if wa else None) if x) or "—"
 
 
-def _principal_payload(c: dict, event: str, link: dict, url: str, extra: dict | None = None) -> dict:
+def _wa_delay() -> int:
+    from .. import settings as S
+
+    return int(S.load()["whatsapp_after_days"])
+
+
+def _nudge_key(cid: int, step: str) -> str:
+    return f"wa_nudge:{cid}:{step}"
+
+
+def _with_whatsapp(c: dict, email: str | None, wa: str | None) -> bool:
+    """WhatsApp rides along with the email only when it isn't being held back: no delay is set,
+    there is no email address to try first, or the nudge for this step has already gone."""
+    return bool(wa) and (not email or _wa_delay() == 0 or store.has_message(_nudge_key(c["id"], c["current_step"])))
+
+
+def _principal_payload(c: dict, event: str, link: dict, url: str, extra: dict | None = None, whatsapp: bool = True) -> dict:
     p = c["principal"]
     step = c["current_step"]
     email, wa, _ = _contacts(p)
@@ -135,6 +152,9 @@ def _principal_payload(c: dict, event: str, link: dict, url: str, extra: dict | 
                      "body_params": [p.get("contact_name") or p["name"], step_id, due or "-"],
                      "button_param": token},
     }
+    if not whatsapp:  # the flow sends WhatsApp only when recipient.whatsapp is filled
+        payload["recipient"]["whatsapp"] = None
+        payload["whatsapp"]["to"] = None
     if extra:
         payload.update(extra)
     return payload
@@ -163,7 +183,7 @@ def step_opened(cid: int, by: str) -> dict:
         return stop
     store.revoke_active_links(cid, by)  # one live link per principal: the one just sent
     link = portal.create_link(cid, by)
-    payload = _principal_payload(c, EVENT_STEP_OPENED, link, config()["public_url"] + link["path"])
+    payload = _principal_payload(c, EVENT_STEP_OPENED, link, config()["public_url"] + link["path"], whatsapp=_with_whatsapp(c, email, wa))
     mid = store.queue_message(cid, EVENT_STEP_OPENED, recipient, payload, by)
     wake()
     return {"status": "queued", "id": mid, "recipient": recipient}
@@ -184,7 +204,7 @@ def reminder(cid: int, kind: str, days_left: int, today: date, by: str = "system
         store.revoke_active_links(cid, by)
         link = portal.create_link(cid, by)
     payload = _principal_payload(c, EVENT_REMINDER, link, config()["public_url"] + link["path"],
-                                 {"reminder": {"kind": kind, "days_left": days_left}})
+                                 {"reminder": {"kind": kind, "days_left": days_left}}, whatsapp=_with_whatsapp(c, email, wa))
     step_id = payload["step"]["label_id"]
     due = payload["step"]["due"] or "-"
     when = (f"{days_left} hari lagi" if days_left > 0 else "hari ini") if kind != "overdue" else f"terlambat {-days_left} hari"
@@ -195,6 +215,43 @@ def reminder(cid: int, kind: str, days_left: int, today: date, by: str = "system
     if mid:
         wake()
     return {"status": "queued" if mid else "duplicate", "id": mid, "recipient": recipient}
+
+
+def whatsapp_nudge(cid: int, by: str = "system") -> dict:
+    """One WhatsApp message with the same link, for a principal who hasn't acted on the email.
+    Once per step: the de-duplication key stops a second one, even after a restart."""
+    c = store.require_cycle(cid)
+    email, wa, recipient = _contacts(c["principal"])
+    key = _nudge_key(cid, c["current_step"])
+    if store.has_message(key):
+        return {"status": "duplicate"}
+    stop = _can_send(cid, EVENT_NUDGE, recipient, by, bool(wa), dedupe=key)
+    if stop:
+        return stop
+    link = portal.current_link_path(cid)
+    if link is None:
+        store.revoke_active_links(cid, by)
+        link = portal.create_link(cid, by)
+    payload = _principal_payload(c, EVENT_NUDGE, link, config()["public_url"] + link["path"],
+                                 {"nudge": {"after_days": _wa_delay()}})
+    payload["recipient"]["email"] = None  # WhatsApp only: the email went already
+    payload["email"] = None
+    mid = store.queue_message(cid, EVENT_NUDGE, recipient, payload, by, dedupe=key)
+    if mid:
+        wake()
+    return {"status": "queued" if mid else "duplicate", "id": mid, "recipient": recipient}
+
+
+def _nudge_due(c: dict, today: date, after_days: int) -> bool:
+    """The email for this step went out, and neither a delivery nor the link being opened happened since."""
+    sent = store.last_sent(c["id"], EVENT_STEP_OPENED)
+    if not sent or (sent["payload"].get("step") or {}).get("key") != c["current_step"]:
+        return False
+    last = datetime.fromisoformat(sent["sent_at"])
+    for link in store.links(c["id"]):
+        if link.get("last_used_at"):
+            last = max(last, datetime.fromisoformat(link["last_used_at"]))
+    return (today - last.date()).days >= after_days
 
 
 def admins() -> list[str]:
@@ -260,9 +317,16 @@ def daily(today: date | None = None) -> dict:
 
     today = today or date.today()
     v = S.load()
-    out = {"reminders": 0, "mou_alert": None}
+    out = {"reminders": 0, "nudges": 0, "mou_alert": None}
     if not config()["enabled"]:
         return out
+    after = int(v["whatsapp_after_days"])
+    if after > 0:
+        for cid in store.open_cycles():
+            c = store.get_cycle(cid)
+            if c["current_step"] in M.PRINCIPAL_STEP_FIELDS and c["current_step"] not in c["submitted_steps"] and _nudge_due(c, today, after):
+                if whatsapp_nudge(cid).get("status") == "queued":
+                    out["nudges"] += 1
     if v["reminders_on"]:
         marks = {int(v["reminder_first_days"]), int(v["reminder_second_days"])}
         for cid in store.open_cycles():

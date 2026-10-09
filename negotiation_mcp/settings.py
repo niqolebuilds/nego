@@ -81,6 +81,9 @@ SETTINGS: tuple[Setting, ...] = (
             "fraction", 0, 5, "Items with the same generic name or group (Admin > Master data) are compared per piece."),
     Setting("escalation_impact", "Escalate when agreed prices cost more than the MOU by (Rp a year)", "Principal negotiations", 0,
             "number", 0, 1e13, "0 = any net increase needs sign-off."),
+    Setting("whatsapp_after_days", "Send the WhatsApp nudge when a principal hasn't acted for this many days", "Principal negotiations", 2,
+            "int", 0, 30, "The link goes by email first. If the principal hasn't opened it or done anything for this long, one WhatsApp "
+                          "message with the same link follows. 0 = send email and WhatsApp together."),
     Setting("reminders_on", "Send deadline reminders to principals", "Principal negotiations", True, "bool",
             help="Through Power Automate, when automatic sending is set up."),
     Setting("reminder_first_days", "First reminder, days before the deadline", "Principal negotiations", 3, "int", 0, 30),

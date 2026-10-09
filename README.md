@@ -277,6 +277,10 @@ the principal or distributor name in the price data).
 **Admin**
 - **Price data:** upload a CSV or Excel file, see a row-checked preview, then *add* or
   *replace*. Every apply is a new version with one-click rollback.
+- **Email first, WhatsApp as a nudge:** a principal's link goes by email. If they haven't opened it or done
+  anything for *WhatsApp nudge after* days (default 2; Admin → Engine settings), one WhatsApp message with
+  the same link follows, once per step. Principals with no email get WhatsApp straight away; 0 days sends
+  both together. Deadline reminders then use both channels. See deploy/POWER_AUTOMATE.md.
 - **Brands tab (per negotiation):** items with the same generic name or group are compared per
   piece including PPN: cheapest brand, each other brand's gap, and the yearly cost of the gap. A
   brand above the cheapest by more than *Price above the cheapest equivalent brand that raises a

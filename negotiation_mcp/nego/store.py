@@ -527,6 +527,16 @@ def messages(cid: int) -> list[dict]:
     return rows
 
 
+def last_sent(cid: int, event: str) -> dict | None:
+    """The most recent delivered message of one kind for a negotiation, with its stored payload."""
+    with connect() as con:
+        r = _d(con.execute("SELECT id, sent_at, payload FROM outbox WHERE cycle_id = ? AND event = ? AND status = 'sent' "
+                           "ORDER BY id DESC LIMIT 1", (cid, event)).fetchone())
+    if r:
+        r["payload"] = json.loads(r["payload"])
+    return r
+
+
 def get_message(mid: int) -> dict | None:
     with connect() as con:
         r = _d(con.execute("SELECT * FROM outbox WHERE id = ?", (mid,)).fetchone())
