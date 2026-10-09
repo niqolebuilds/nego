@@ -219,3 +219,25 @@
 /* MOU renewal board */
 .col.s-renewed header b { color: var(--good); }
 .bcard.urgent { border-left: 3px solid var(--sunset); }
+
+/* Admin > Master data */
+.mset { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
+.mcard { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); }
+.mcard.attn { border-left: 5px solid var(--sunset); }
+.mcard b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.mcard .lbl { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.badge { display: inline-block; align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--sunset) 16%, var(--surface-1)); color: #8a3d00; }
+.badge.ok { background: var(--positive-bg); color: var(--positive-ink); }
+.mtools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.mtools .chips { margin: 0; }
+.msearch { flex: 1 1 240px; min-width: 0; }
+.mbulk { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--surface-breeze); position: sticky; top: 0; z-index: 3; }
+.mrow { display: inline-flex; gap: 6px; align-items: center; }
+.mrow input { width: 190px; }
+.mtable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mtable th { text-align: left; font-size: 12.5px; color: var(--text-secondary); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.mtable td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.mtable td input:not([type=checkbox]) { width: 100%; min-width: 100px; box-sizing: border-box; }
+.mtable .mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.msaved { display: block; min-height: 16px; }
+tr.best td { background: color-mix(in srgb, var(--positive-bg) 35%, transparent); }

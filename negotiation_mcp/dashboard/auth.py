@@ -25,6 +25,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 
@@ -122,6 +123,21 @@ def current_user(request: Request) -> dict | None:
     return appdb.session_user(sid) if sid else None
 
 
+# What a negotiator may do under /api/admin: run a negotiation (prices, counter offers, anomalies,
+# benchmarks, principal links and messages, the package), but not change master data: principals,
+# opening or preparing a negotiation, uploads and price data, users, settings, notification setup.
+# They may read master data (what the brand comparison is built on) but not change it.
+NEGOTIATOR_PATHS = re.compile(
+    r"^/api/admin/master/(?:overview|items|items\.xlsx)$"  # read-only; the label, bulk and import routes stay admin-only
+    r"|^/api/admin/nego/(?:notify|assist)$"
+    r"|^/api/admin/nego/cycles/[^/]+/(?:items/\d+|scan|step|anomalies/\d+|links|links/send|links/\d+/revoke|messages|messages/\d+/retry"
+    r"|assist|benchmarks/match|benchmarks/\d+|co|on-fill|package\.xlsx|documents|documents/\d+)$")
+
+
+def negotiator_may(path: str) -> bool:
+    return bool(NEGOTIATOR_PATHS.match(path))
+
+
 def _deny(status: int, message: str) -> Response:
     return Response(json.dumps({"error": message}), status_code=status, media_type="application/json")
 
@@ -139,7 +155,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 user = request.state.user
                 if not user:
                     return _deny(401, "Please sign in")
-                if path.startswith("/api/admin/") and user["role"] != "admin":
+                if path.startswith("/api/admin/") and user["role"] != "admin" and not (user["role"] == "negotiator" and negotiator_may(path)):
                     return _deny(403, "Admins only")
         response = await call_next(request)
         if path == "/" or path.endswith(".html") or path == "/analytics" or path == "/p" or path.startswith("/p/"):

@@ -10,6 +10,7 @@ reason, and still requires the app header on every write.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from starlette.requests import Request
@@ -112,6 +113,7 @@ async def me(_: Request, acc: dict) -> Response:
         "ppn": portal.ppn(), "thresholds": portal.thresholds(),
         "reasons": [{"key": k, "id": a, "en": b} for k, a, b in checks.REASONS],
         "link_expires": acc["link"]["expires_at"],
+        "help": {"whatsapp": os.environ.get("NEGO_HELP_WHATSAPP", "").strip(), "email": os.environ.get("NEGO_HELP_EMAIL", "").strip()},
     })
 
 

@@ -6,6 +6,7 @@
 
 const ng = { list: null, cid: null, ov: null, tab: "items", page: { q: "", filter: "all", sort: "sort", offset: 0 }, findStatus: "open", rule: "" };
 const isAdmin = () => shell.user && shell.user.role === "admin";
+const canWork = () => shell.user && (shell.user.role === "admin" || shell.user.role === "negotiator");
 const WHO = { admin: "Siloam", principal: "Principal", reference: "Reference" };
 const STEP_DESC = {
   prepare: "Siloam builds the item list from 12 months of POs, the formulary and the current MOU.",
@@ -233,7 +234,7 @@ async function ngCycle(cid, tab) {
     ng.page = { q: "", filter: "all", sort: "sort", offset: 0 };
   }
   ng.cid = cid;
-  ng.tab = ["items", "findings", "negotiate", "files", "activity"].includes(tab) ? tab : "items";
+  ng.tab = ["items", "findings", "brands", "negotiate", "files", "activity"].includes(tab) ? tab : "items";
   try { ng.ov = await api(`/api/nego/cycles/${cid}`); } catch (e) { clear(page).append(el("p", { class: "error pad", text: e.message }), el("a", { href: "#nego", text: "← All principals" })); return; }
   renderCycle();
 }
@@ -247,7 +248,7 @@ function renderCycle() {
   const page = clear($("nego"));
   const c = ng.ov.cycle;
   const tabs = el("nav", { class: "subtabs", "aria-label": "Negotiation sections" },
-    [["items", "Items"], ["findings", "Findings"], ["negotiate", "Negotiate"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
+    [["items", "Items"], ["findings", "Findings"], ["brands", "Brands"], ["negotiate", "Negotiate"], ["files", "Files & prepare"], ["activity", "Activity"]].map(([k, label]) =>
       el("a", { href: `#nego/${c.id}/${k}`, class: ng.tab === k ? "on" : null, "data-tab": k }, label, k === "findings" ? el("span", { class: "count", id: "ng-find-count" }) : null)));
   page.append(
     el("a", { class: "back", href: "#nego", text: "← All principals" }),
@@ -258,7 +259,7 @@ function renderCycle() {
         el("p", { class: "muted", text: `Contract ${fmtDate(c.contract_start)} – ${fmtDate(c.contract_end)} · Binding ${c.binding === "Disc" ? "discount" : "nett price"} · PPN ${pct(ng.ov.ppn, 0)}` })),
       el("div", { class: "ng-tools" },
         el("a", { class: "act secondary", href: `/api/nego/cycles/${c.id}/export.xlsx`, text: "Download Template_Nego" }),
-        isAdmin() && c.status === "open" ? act("Principal link", () => linkPanel(c), "secondary") : null,
+        canWork() && c.status === "open" ? act("Principal link", () => linkPanel(c), "secondary") : null,
         isAdmin() ? act("Edit principal", () => principalForm(c.principal), "ghost") : null)),
     el("div", { id: "ng-steps" }),
     el("div", { class: "kpis5", id: "ng-kpis" }),
@@ -266,7 +267,7 @@ function renderCycle() {
     tabs,
     el("div", { id: "ng-body" }));
   renderHeaderParts();
-  ({ items: renderItems, findings: renderFindings, negotiate: renderNegotiate, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
+  ({ items: renderItems, findings: renderFindings, brands: renderBrands, negotiate: renderNegotiate, files: renderFiles, activity: renderActivity })[ng.tab]($("ng-body"));
 }
 
 function renderHeaderParts() {
@@ -279,7 +280,7 @@ function renderHeaderParts() {
       el("span", { class: "n", text: i < at ? "✓" : String(i) }),
       el("span", { class: "t" }, el("b", { text: s.label }), el("small", { class: `who ${s.who}`, text: WHO[s.who] })))));
   const nextKey = keys[at + 1];
-  const move = isAdmin() && c.status === "open" ? el("div", { class: "step-actions" },
+  const move = canWork() && c.status === "open" ? el("div", { class: "step-actions" },
     el("p", { class: "small", text: STEP_DESC[c.current_step] }),
     nextKey ? act(`Move to ${steps[at + 1].label}`, () => moveStep(nextKey)) : null,
     at > 0 ? act("Back a step", () => moveStep(keys[at - 1]), "ghost") : null) : el("p", { class: "small muted step-actions", text: STEP_DESC[c.current_step] });
@@ -506,7 +507,7 @@ async function openItem(id) {
         const shown = v == null ? "" : c.kind === "pct" ? String(+(v * 100).toFixed(4)) : String(v);
         input = el("input", { name: f, value: shown, inputmode: c.kind === "text" ? null : "decimal", placeholder: c.kind === "pct" ? "%" : null });
       }
-      if (!isAdmin()) input.setAttribute("disabled", "");
+      if (!canWork()) input.setAttribute("disabled", "");
       inputs[f] = input;
       grid.append(field(c.kind === "pct" ? `${c.header.replace("%", "")} (%)` : c.header, input));
     }
@@ -514,7 +515,7 @@ async function openItem(id) {
     form.append(fs);
   }
   const msg = el("p", { class: "error", role: "alert", hidden: "" });
-  if (isAdmin()) form.append(msg, el("div", { class: "actions" }, el("button", { type: "submit", class: "act", text: "Save changes" }),
+  if (canWork()) form.append(msg, el("div", { class: "actions" }, el("button", { type: "submit", class: "act", text: "Save changes" }),
     el("span", { class: "small muted", text: "Every change is logged with your name." })));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -547,7 +548,7 @@ async function openItem(id) {
     el("p", { class: "muted small", text: [it.brand, it.catalog_no, it.item_status].filter(Boolean).join(" · ") }),
     prices, facts, reason,
     el("h3", { text: "Findings" }), findings,
-    el("h3", { text: isAdmin() ? "Edit" : "Values" }), form,
+    el("h3", { text: canWork() ? "Edit" : "Values" }), form,
     el("h3", { text: "History" }), hist);
 }
 
@@ -559,7 +560,7 @@ async function renderFindings(body) {
   const chips = el("div", { class: "chips" });
   const list = el("div", { class: "findings" });
   body.append(el("div", { class: "filters board-filters" }, el("label", {}, "Status", status),
-    isAdmin() ? act("Rescan now", async () => {
+    canWork() ? act("Rescan now", async () => {
       try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/scan`, "POST", {}); toast(`${r.found} findings · ${r.new} new · ${r.cleared} cleared`); await refreshOverview(); renderFindings(body); } catch (e) { toast(e.message); }
     }, "secondary") : null,
     el("p", { class: "small muted grow", text: "The scan proposes; a person decides. Fix applies the suggested value. Keep as is needs a reason. Decisions stay through rescans." })),
@@ -586,7 +587,7 @@ function renderFindingList(box, rows, after, inDrawer = false) {
     const keepBox = el("div", { class: "keep", hidden: "" }, reason,
       act("Keep as is", async () => { await decideFinding(a, "keep", reason.value, after); }),
       act("Cancel", () => { keepBox.hidden = true; }, "ghost"));
-    const actions = isAdmin() ? el("div", { class: "actions" },
+    const actions = canWork() ? el("div", { class: "actions" },
       a.status === "open" && a.suggestion != null ? act(a.suggestion_text || "Apply fix", () => decideFinding(a, "fix", "", after)) : null,
       a.status === "open" ? act(a.suggestion != null ? "Mark fixed" : "Fixed it", () => decideFinding(a, "fix", "", after), a.suggestion != null ? "ghost" : "secondary") : null,
       a.status === "open" ? act("Keep as is…", () => { keepBox.hidden = false; reason.focus(); }, "ghost") : null,
@@ -725,7 +726,7 @@ async function renderMessages(box) {
   clear(box).append(el("div", { class: "card msgs" },
     el("div", { class: "msg-head" }, el("h3", { text: "Messages to the principal" }),
       el("span", { class: `pill ${a.enabled ? "good" : ""}`, text: a.enabled ? `Automatic sending on · ${a.webhook_host}` : "Automatic sending off" }),
-      isAdmin() && ng.ov.cycle.status === "open" && PRINCIPAL_STEPS.has(ng.ov.cycle.current_step) ? act("Send link now", async () => {
+      canWork() && ng.ov.cycle.status === "open" && PRINCIPAL_STEPS.has(ng.ov.cycle.current_step) ? act("Send link now", async () => {
         try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/links/send`, "POST", {}); toast(r.status === "queued" ? `Link sent to ${r.recipient}` : "Not sent: see the message list"); await refreshOverview(); renderActivity($("ng-body")); } catch (e) { toast(e.message); }
       }, "secondary") : null),
     d.messages.length ? el("table", { class: "msg-table" }, el("thead", {}, el("tr", {}, ["When", "Message", "To", "Status", ""].map((h) => el("th", { text: h })))),
@@ -735,7 +736,7 @@ async function renderMessages(box) {
         el("td", { text: m.recipient || "—" }),
         el("td", {}, el("span", { class: `mstat s-${m.status}`, text: { queued: "Queued", sending: "Sending", sent: "Sent", failed: `Failed (${m.attempts} tries)`, skipped: "Not sent" }[m.status] || m.status }),
           m.last_error ? el("div", { class: "small muted", text: m.last_error }) : null),
-        el("td", {}, isAdmin() && m.status === "failed" ? act("Retry", async () => {
+        el("td", {}, canWork() && m.status === "failed" ? act("Retry", async () => {
           try { await send(`/api/admin/nego/cycles/${ng.cid}/messages/${m.id}/retry`, "POST", {}); toast("Queued again"); setTimeout(() => renderActivity($("ng-body")), 800); } catch (e) { toast(e.message); }
         }, "ghost") : null))))) : el("p", { class: "muted small", text: "No messages yet. They're sent when the negotiation moves to a principal step." })));
 }
@@ -795,6 +796,36 @@ async function linkPanel(c) {
   try { draw((await api(`/api/admin/nego/cycles/${c.id}/links`)).links); } catch (e) { list.append(el("p", { class: "error", text: e.message })); }
 }
 
+// ---------- brands: the same generic from different brands, side by side ----------
+async function renderBrands(body) {
+  clear(body);
+  put(body, el("p", { class: "muted pad", text: "Comparing brands…" }));
+  let d;
+  try { d = await api(`/api/nego/cycles/${ng.cid}/groups`); } catch (e) { put(clear(body), el("p", { class: "error pad", text: e.message })); return; }
+  const stage = { rfq: "RFQ", co: "Counter offer", fb1: "Feedback I", on: "Online nego", mou: "MOU", po: "Last PO" };
+  const groupCard = (g) => card(`${g.label}`, `${g.members.length} items · cheapest ${unit(g.cheapest.price)}/pc · highest is ${pct(g.spread, 0)} above${g.potential_saving ? ` · ${money(g.potential_saving)} a year if the dearer ones matched the cheapest` : ""}`,
+    el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ["Item", "Brand", "Price/pc incl. PPN", "Basis", "Above cheapest", "Annual pieces", "Extra cost a year"].map((h, i) => el("th", { class: i >= 2 && i !== 3 ? "num" : null, text: h })))),
+      el("tbody", {}, g.members.map((m, i) => el("tr", { class: i === 0 ? "best" : null },
+        el("td", {}, el("b", { text: m.item_name || "—" }), el("div", { class: "small muted", text: m.erp_code || "" })),
+        el("td", { text: m.brand || "—" }),
+        el("td", { class: "num", text: unit(m.price) }),
+        el("td", { text: stage[m.stage] || "—" }),
+        el("td", { class: "num", text: i === 0 ? "Cheapest" : `+${pct(m.gap, 1)}` }),
+        el("td", { class: "num", text: m.annual_pcs ? num(m.annual_pcs) : "—" }),
+        el("td", { class: "num", text: i === 0 || m.extra_cost == null ? "—" : money(m.extra_cost) })))))));
+  const flagged = d.groups.filter((g) => g.flagged), rest = d.groups.filter((g) => !g.flagged);
+  put(clear(body),
+    card("Same medicine, different brands", `Items with the same generic name or group (set in Admin > Master data) compared per piece including PPN. A brand is flagged when it costs ${pct(d.spread_threshold, 0)} or more above the cheapest. Principals never see this.`,
+      el("div", { class: "facts" }, [["Groups compared", d.groups.length], ["Flagged", d.flagged], ["Possible saving a year", d.potential_saving ? money(d.potential_saving) : "—"],
+        ["Items in a group", d.grouped_items], ["Items with no generic name yet", d.ungrouped_items]].map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: typeof v === "number" ? num(v) : v })))),
+      d.ungrouped_items ? el("p", { class: "small muted", text: isAdmin() ? "Label more items in Admin > Master data to compare more." : "An admin labels items in Master data." }) : null,
+      canWork() && d.ungrouped_items ? act("Open master data", () => { location.hash = "#admin/master"; }, "secondary") : null),
+    d.groups.length ? null : el("p", { class: "muted pad", text: "No group has two or more priced items yet." }),
+    flagged.map(groupCard),
+    rest.length ? el("details", {}, el("summary", { text: `${rest.length} groups within ${pct(d.spread_threshold, 0)}` }), rest.map(groupCard)) : null);
+}
+
 // ---------- negotiate: counter offer, benchmarks, online nego, package ----------
 // Append children, skipping null/false (Element.append would print them as text).
 const put = (n, ...kids) => { n.append(...kids.flat(2).filter((k) => k != null && k !== false)); return n; };
@@ -803,7 +834,7 @@ function benchRow(m, after) {
   return el("div", { class: `bm st-${m.status}` },
     el("div", {}, el("b", { text: `${m.source}: ${unit(m.price_pp)}/pc` }), el("span", { class: "small muted", text: ` · ${m.bm_name}${m.bm_unit ? ` (${m.bm_unit})` : ""}` }),
       el("div", { class: "small muted", text: `Match ${pct(m.confidence, 0)} by ${m.method === "ref" ? "catalogue no." : m.method === "remembered" ? "earlier confirmation" : "name"} · ${m.status === "confirmed" ? "confirmed" : m.status === "rejected" ? "rejected" : "to review"}` })),
-    isAdmin() ? el("div", { class: "actions" },
+    canWork() ? el("div", { class: "actions" },
       m.status !== "confirmed" ? act("Confirm", () => decideBench(m.id, "confirm", after), "ghost") : null,
       m.status !== "rejected" ? act("Not the same", () => decideBench(m.id, "reject", after), "ghost") : null) : null);
 }
@@ -823,7 +854,7 @@ async function renderNegotiate(body) {
     card("6 · Online Nego", "After the meeting, record what was agreed. Start from the principal's Feedback I discount (else the counter offer) and edit items in the Items tab.", onBox),
     card("Submission package", "The agreed prices as Excel Confirmation and BAK draft (by binding), active items only, A–Z, no duplicate ERP codes. Company documents the principal sends at the last step are encrypted and only admins can open them.", pkBox));
   drawCO(coBox); drawBench(bmBox); drawOn(onBox, c); drawPackage(pkBox);
-  if (isAdmin()) { const aiBox = el("div"); put(body, card("Draft with Claude (optional)", "Claude writes, the engine computes. Drafts use only counts, your meeting notes and escalation totals, never the item price list, and you review every draft before using it.", aiBox)); drawAssist(aiBox); }
+  if (canWork()) { const aiBox = el("div"); put(body, card("Draft with Claude (optional)", "Claude writes, the engine computes. Drafts use only counts, your meeting notes and escalation totals, never the item price list, and you review every draft before using it.", aiBox)); drawAssist(aiBox); }
 }
 
 async function drawAssist(box) {
@@ -862,7 +893,7 @@ async function drawCO(box) {
       .map(([l, v]) => el("div", {}, el("span", { text: l }), el("b", { text: v }))));
   const sample = plan.suggestions.slice(0, 5).map((s) => el("li", { class: "small", text: `${pct(s.co_disc, 1)} — ${s.note}` }));
   put(clear(box), facts, sample.length ? el("details", {}, el("summary", { text: "Examples" }), el("ul", {}, sample)) : null,
-    isAdmin() ? el("div", { class: "actions" },
+    canWork() ? el("div", { class: "actions" },
       plan.count ? act(`Apply ${num(plan.count)} suggestions`, async () => {
         try { const r = await send(`/api/admin/nego/cycles/${ng.cid}/co`, "POST", { overwrite: false }); toast(`${r.applied} counter offers set`); await refreshOverview(); drawCO(box); } catch (e) { toast(e.message); }
       }) : el("span", { class: "small muted", text: "Every item with an RFQ already has a counter offer." }),
@@ -913,7 +944,7 @@ async function drawBench(box) {
       { label: "Benchmark", get: (m) => el("div", {}, m.bm_name, el("div", { class: "small muted", text: [m.source, m.bm_brand, m.bm_unit].filter(Boolean).join(" · ") })) },
       { label: "Price/pc", num: true, get: (m) => unit(m.price_pp) },
       { label: "Match", num: true, get: (m) => pct(m.confidence, 0) },
-      { label: "", get: (m) => isAdmin() ? el("div", { class: "actions" }, act("Same", () => decideBench(m.id, "confirm", () => drawBench(box)), "ghost"), act("Different", () => decideBench(m.id, "reject", () => drawBench(box)), "ghost")) : "" },
+      { label: "", get: (m) => canWork() ? el("div", { class: "actions" }, act("Same", () => decideBench(m.id, "confirm", () => drawBench(box)), "ghost"), act("Different", () => decideBench(m.id, "reject", () => drawBench(box)), "ghost")) : "" },
     ], d.matches.slice(0, 40));
     put(review, el("details", {}, el("summary", { text: `Review ${num(d.matches.length)} possible matches` }),
       el("div", { class: "table-wrap" }, t), d.matches.length > 40 ? el("p", { class: "small muted", text: `Showing 40 of ${d.matches.length}. Confirm or reject these to see more.` }) : null));
@@ -930,7 +961,7 @@ function drawOn(box, c) {
       el("b", { text: !esc.items_agreed ? "No agreed prices yet" : esc.needed ? "Escalation needed before the BAK" : "Within limits: no escalation needed" }),
       esc.items_agreed ? el("span", { class: "small", text: ` · ${num(esc.items_agreed)} items agreed · impact a year ${esc.impact > 0 ? "+" : ""}${money(esc.impact)}` }) : null,
       esc.reasons.length ? el("ul", { class: "small" }, esc.reasons.map((r) => el("li", { text: r }))) : null),
-    isAdmin() ? el("form", { class: "progress-form", onsubmit: async (e) => {
+    canWork() ? el("form", { class: "progress-form", onsubmit: async (e) => {
       e.preventDefault();
       try { await send(`/api/admin/nego/cycles/${ng.cid}`, "PATCH", { meeting_at: at.value, meeting_notes: notes.value }); toast("Meeting saved"); await refreshOverview(); } catch (ex) { toast(ex.message); }
     } }, el("div", { class: "row2" }, field("Meeting date and time", at), el("span")), field("Meeting notes", notes),
@@ -946,8 +977,8 @@ async function drawPackage(box) {
   put(clear(box), el("div", { class: `preview ${chk.ready ? "ok" : "bad"}` },
     el("h3", { text: chk.ready ? `Ready: ${num(chk.agreed)} agreed items` : `${num(chk.agreed)} agreed items — not ready yet` }),
     chk.problems.length ? el("ul", { class: "errors" }, chk.problems.map((p) => el("li", { text: p }))) : null,
-    isAdmin() && chk.agreed ? el("div", { class: "actions" }, el("a", { class: "act", href: `/api/admin/nego/cycles/${ng.cid}/package.xlsx`, text: chk.ready ? "Download Confirmation & BAK draft" : "Download as draft" })) : null));
-  if (!isAdmin()) return;
+    canWork() && chk.agreed ? el("div", { class: "actions" }, el("a", { class: "act", href: `/api/admin/nego/cycles/${ng.cid}/package.xlsx`, text: chk.ready ? "Download Confirmation & BAK draft" : "Download as draft" })) : null));
+  if (!canWork()) return;
   let docs;
   try { docs = await api(`/api/admin/nego/cycles/${ng.cid}/documents`); } catch (_) { return; }
   put(box, el("h3", { text: "Company documents from the principal" }),

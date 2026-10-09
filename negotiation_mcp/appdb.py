@@ -21,7 +21,7 @@ from typing import Any, Iterator
 from .engine import EngineError
 from .settings import workspace
 
-ROLES = ("viewer", "admin")
+ROLES = ("viewer", "negotiator", "admin")
 STAGES = (
     ("not_started", "Not started"),
     ("preparing", "Preparing"),
@@ -39,7 +39,7 @@ MIN_PASSWORD = 10
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('viewer','admin')), active INTEGER NOT NULL DEFAULT 1,
+  role TEXT NOT NULL CHECK (role IN ('viewer','negotiator','admin')), active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL, created_by TEXT, last_login TEXT);
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
@@ -105,12 +105,38 @@ def _create(path) -> None:
 USER_COLUMNS = {"password_hash": "TEXT", "setup_token": "TEXT", "setup_expires": "TEXT"}
 
 
+def _allow_negotiator_role() -> None:
+    """Older app.db files restrict users.role to viewer/admin. SQLite can't alter a CHECK, so
+    the table is rebuilt once with the wider rule; every column and row is kept."""
+    path = db_path()
+    if not path.exists():
+        return
+    con = sqlite3.connect(path, isolation_level=None)
+    try:
+        row = con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+        if not row or "'negotiator'" in row[0]:
+            return
+        wider = row[0].replace("CHECK (role IN ('viewer','admin'))", "CHECK (role IN ('viewer','negotiator','admin'))")
+        if wider == row[0]:
+            return
+        con.execute("PRAGMA foreign_keys = OFF")
+        con.execute("BEGIN")
+        con.execute(wider.replace("CREATE TABLE users", "CREATE TABLE users_new", 1))
+        con.execute("INSERT INTO users_new SELECT * FROM users")
+        con.execute("DROP TABLE users")
+        con.execute("ALTER TABLE users_new RENAME TO users")
+        con.execute("COMMIT")
+    finally:
+        con.close()
+
+
 def init() -> str | None:
     """Create tables, and the first admin if there are no users yet. Safe to call again.
 
     Returns a one-time password-setup token for the first admin when one was just created
     and ``NEGO_ADMIN_PASSWORD`` wasn't given, so the caller can print the link.
     """
+    _allow_negotiator_role()
     with connect() as con:
         con.executescript(SCHEMA)
         have = {r[1] for r in con.execute("PRAGMA table_info(users)")}
@@ -195,7 +221,7 @@ def create_user(email: str, name: str, role: str, by: str) -> dict:
     if not name or len(name) > 120:
         raise EngineError("Enter the person's name")
     if role not in ROLES:
-        raise EngineError("Role must be viewer or admin")
+        raise EngineError("Role must be viewer, negotiator or admin")
     with connect() as con:
         if con.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             raise EngineError(f"{email} is already registered")
@@ -212,7 +238,7 @@ def update_user(user_id: int, by: str, role: str | None = None, active: bool | N
     changes: dict[str, Any] = {}
     if role is not None:
         if role not in ROLES:
-            raise EngineError("Role must be viewer or admin")
+            raise EngineError("Role must be viewer, negotiator or admin")
         changes["role"] = role
     if active is not None:
         changes["active"] = 1 if active else 0
@@ -220,7 +246,7 @@ def update_user(user_id: int, by: str, role: str | None = None, active: bool | N
         changes["name"] = name.strip()[:120]
     if not changes:
         return user
-    losing_admin = user["role"] == "admin" and (changes.get("role") == "viewer" or changes.get("active") == 0)
+    losing_admin = user["role"] == "admin" and (changes.get("role", "admin") != "admin" or changes.get("active") == 0)
     if losing_admin:
         with connect() as con:
             admins = con.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]

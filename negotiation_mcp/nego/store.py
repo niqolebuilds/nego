@@ -90,6 +90,11 @@ CREATE TABLE IF NOT EXISTS anomalies (
 CREATE TABLE IF NOT EXISTS cycle_events (
   id INTEGER PRIMARY KEY, cycle_id INTEGER NOT NULL, at TEXT NOT NULL, user_email TEXT NOT NULL,
   action TEXT NOT NULL, detail TEXT);
+CREATE TABLE IF NOT EXISTS item_master (
+  erp_code TEXT PRIMARY KEY COLLATE NOCASE, item_name TEXT, generic_name TEXT, group_key TEXT, brand TEXT,
+  catalog_no TEXT, uom TEXT, tags TEXT, status TEXT NOT NULL DEFAULT 'new', source TEXT,
+  first_seen TEXT NOT NULL, updated_at TEXT, updated_by TEXT);
+CREATE INDEX IF NOT EXISTS ix_master_status ON item_master(status);
 CREATE INDEX IF NOT EXISTS ix_items_cycle ON cycle_items(cycle_id, sort);
 CREATE INDEX IF NOT EXISTS ix_items_erp ON cycle_items(cycle_id, erp_code);
 CREATE INDEX IF NOT EXISTS ix_anom_cycle ON anomalies(cycle_id, status);
@@ -145,6 +150,10 @@ def init() -> None:
                 con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {kind}")
         # one message per de-duplication key (daily reminders survive restarts without repeating)
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_outbox_dedupe ON outbox(dedupe)")
+        # every item code already in a negotiation is master data too; new ones wait for review
+        con.execute("INSERT OR IGNORE INTO item_master (erp_code, item_name, brand, catalog_no, uom, status, source, first_seen) "
+                    "SELECT TRIM(erp_code), MAX(item_name), MAX(brand), MAX(catalog_no), MAX(po_unit_text), 'new', 'negotiation', ? "
+                    "FROM cycle_items WHERE TRIM(COALESCE(erp_code, '')) != '' GROUP BY TRIM(erp_code) COLLATE NOCASE", (now(),))
 
 
 def _d(r: sqlite3.Row | None) -> dict | None:
@@ -518,6 +527,16 @@ def messages(cid: int) -> list[dict]:
     return rows
 
 
+def last_sent(cid: int, event: str) -> dict | None:
+    """The most recent delivered message of one kind for a negotiation, with its stored payload."""
+    with connect() as con:
+        r = _d(con.execute("SELECT id, sent_at, payload FROM outbox WHERE cycle_id = ? AND event = ? AND status = 'sent' "
+                           "ORDER BY id DESC LIMIT 1", (cid, event)).fetchone())
+    if r:
+        r["payload"] = json.loads(r["payload"])
+    return r
+
+
 def get_message(mid: int) -> dict | None:
     with connect() as con:
         r = _d(con.execute("SELECT * FROM outbox WHERE id = ?", (mid,)).fetchone())
@@ -607,6 +626,11 @@ def _insert_items(con: sqlite3.Connection, cid: int, rows: list[dict], by: str) 
             f"INSERT INTO cycle_items (cycle_id, {', '.join(cols)}, updated_at, updated_by) "
             f"VALUES (?, {', '.join('?' * len(cols))}, ?, ?)", [cid, *[vals[c] for c in cols], now(), by])
         ids.append(cur.lastrowid)
+        code = str(vals.get("erp_code") or "").strip()
+        if code:  # a code we have not seen before becomes master data, waiting for an admin to label it
+            con.execute("INSERT OR IGNORE INTO item_master (erp_code, item_name, brand, catalog_no, uom, status, source, first_seen) "
+                        "VALUES (?,?,?,?,?, 'new', 'negotiation', ?)",
+                        (code, vals.get("item_name"), vals.get("brand"), vals.get("catalog_no"), vals.get("po_unit_text"), now()))
     return ids
 
 

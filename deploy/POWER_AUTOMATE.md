@@ -31,15 +31,21 @@ button on a negotiation at a principal step). The flow should answer 200.
 
 | `event` | When | To | WhatsApp template |
 |---|---|---|---|
-| `principal.step_opened` | An admin moves the negotiation to a principal step | Principal: email and WhatsApp | `siloam_nego_step_open` |
-| `principal.reminder` | 3 and 1 days before the step deadline, then daily while late, until the principal sends | Principal: email and WhatsApp | `siloam_nego_reminder` |
+| `principal.step_opened` | An admin moves the negotiation to a principal step | Principal: **email first**; WhatsApp too only when *WhatsApp nudge after* is 0 or there is no email address | `siloam_nego_step_open` |
+| `principal.whatsapp_nudge` | The principal hasn't opened the link or done anything for *WhatsApp nudge after* days (default 2); once per step | Principal: **WhatsApp only** (`recipient.email` is null) | `siloam_nego_step_open` |
+| `principal.reminder` | 3 and 1 days before the step deadline, then daily while late, until the principal sends | Principal: email; WhatsApp too once the nudge has gone | `siloam_nego_reminder` |
 | `siloam.step_submitted` | A principal sends a step | `NEGO_NOTIFY_ADMINS`: email only | none |
 | `siloam.mou_alert` | Weekly (Monday by default), when some MOUs end within 6 months with no negotiation open | `NEGO_NOTIFY_ADMINS`: email only | none |
 | `test` | The admin's test call | none; just answer 200 | none |
 
 - **Reminder timing:** reminder days, the default step deadline and the alert weekday are set in
   **Admin → Engine settings**.
-- **Same link:** a reminder carries the same link the principal already got.
+- **Same link:** a reminder or nudge carries the same link the principal already got.
+- **Which channel:** the app decides by filling or emptying `recipient.email` and `recipient.whatsapp`. The flow
+  needs no change: it already sends the email only when `recipient.email` is not empty and the WhatsApp
+  message only when `recipient.whatsapp` is not empty. In the Parse JSON schema, allow `null` for the
+  `email` and `whatsapp` blocks (`"type": ["object", "null"]`), because the nudge has no email block.
+- **Setting:** *WhatsApp nudge after (days)* in **Admin → Engine settings**. 0 sends email and WhatsApp together, as before.
 - **Never twice:** the app never sends the same reminder twice on one day, even after a restart.
 - **Recipients for Siloam's emails:** `siloam.*` events list them in `email.to`, an array; send
   one email per address or join them with `;`.
@@ -103,8 +109,8 @@ Create an **Automated cloud flow → When an HTTP request is received**.
          "label_en": {"type": "string"}, "due": {"type": ["string", "null"]}}},
        "link": {"type": "string"},
        "link_token": {"type": "string"},
-       "email": {"type": "object", "properties": {"subject": {"type": "string"}, "html": {"type": "string"}}},
-       "whatsapp": {"type": "object", "properties": {
+       "email": {"type": ["object", "null"], "properties": {"subject": {"type": "string"}, "html": {"type": "string"}}},
+       "whatsapp": {"type": ["object", "null"], "properties": {
          "to": {"type": ["string", "null"]}, "template": {"type": "string"}, "language": {"type": "string"},
          "body_params": {"type": "array", "items": {"type": "string"}}, "button_param": {"type": "string"}}}
      }

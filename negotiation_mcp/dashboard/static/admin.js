@@ -6,10 +6,13 @@
 const adminState = { sub: "data", staged: null };
 
 function adminEnter(sub) {
-  adminState.sub = ["data", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
+  const nego = shell.user && shell.user.role === "negotiator";  // read-only master data, nothing else
+  if (nego) sub = "master";
+  $("admin-subtabs").hidden = nego;
+  adminState.sub = ["data", "master", "documents", "settings", "users", "activity"].includes(sub) ? sub : "data";
   document.querySelectorAll("#admin-subtabs a").forEach((a) => a.classList.toggle("on", a.dataset.sub === adminState.sub));
   const body = clear($("admin-body"));
-  return ({ data: adminData, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
+  return ({ data: adminData, master: adminMaster, documents: adminDocs, settings: adminSettings, users: adminUsers, activity: adminActivity })[adminState.sub](body);
 }
 
 function card(title, sub, ...kids) {
@@ -278,7 +281,7 @@ async function adminSettings(body) {
 async function adminUsers(body) {
   const email = el("input", { id: "u-email", type: "email", placeholder: "name@siloamhospitals.com", required: "" });
   const name = el("input", { id: "u-name", placeholder: "Full name", required: "" });
-  const role = el("select", { id: "u-role" }, el("option", { value: "viewer", text: "Viewer: sees everything, updates renewals" }),
+  const role = el("select", { id: "u-role" }, el("option", { value: "viewer", text: "Viewer: sees everything, updates renewals" }), el("option", { value: "negotiator", text: "Negotiator: runs negotiations (prices, counter offers, anomalies, principal links)" }),
     el("option", { value: "admin", text: "Admin: also uploads data, tunes the engine, manages users" }));
   const msg = el("p", { class: "small", role: "status" });
   const form = el("form", { class: "row3" },
@@ -307,7 +310,7 @@ async function adminUsers(body) {
     { label: "Name", get: (u) => u.name },
     { label: "Email", get: (u) => u.email },
     { label: "Role", get: (u) => {
-      const s = el("select", { "aria-label": `Role for ${u.name}` }, el("option", { value: "viewer", text: "Viewer" }), el("option", { value: "admin", text: "Admin" }));
+      const s = el("select", { "aria-label": `Role for ${u.name}` }, el("option", { value: "viewer", text: "Viewer" }), el("option", { value: "negotiator", text: "Negotiator" }), el("option", { value: "admin", text: "Admin" }));
       s.value = u.role;
       s.addEventListener("change", () => patch(u, { role: s.value }, `${u.name} is now ${s.value}`));
       return s;

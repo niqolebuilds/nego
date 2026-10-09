@@ -45,6 +45,8 @@ Items marked **Blocker** must be done first.
 | `NEGO_NOTIFY_WEBHOOK_URL` | automatic sending | The Power Automate trigger URL (see `POWER_AUTOMATE.md`). |
 | `NEGO_NOTIFY_SECRET` | optional | HMAC signature header for the webhook. |
 | `NEGO_NOTIFY_ADMINS` | notices to Siloam | Comma-separated emails for "principal sent" notices and the MOU alert. |
+| `NEGO_HELP_WHATSAPP` | vendor help | Number for the portal's **Bantuan** button (wa.me link), e.g. `+6281234567890`. |
+| `NEGO_HELP_EMAIL` | vendor help | Address for the same button. |
 | `ANTHROPIC_API_KEY` | optional | Claude drafting. Also turn on "Draft messages with Claude" in Engine settings. |
 
 ## 4. Data

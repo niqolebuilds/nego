@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from .. import appdb
 from ..engine import EngineError
-from ..nego import assist, benchmark, demo, negotiate, notify, portal, service, store, vault
+from ..nego import assist, benchmark, demo, groups, negotiate, notify, portal, service, store, vault
 from .admin import _form_file
 from .app import _calendar, fail, ok
 
@@ -340,6 +340,14 @@ async def benchmark_match(request: Request) -> Response:
 
 
 @handler
+async def cycle_groups(request: Request) -> Response:
+    """The cycle's items compared across brands of the same generic name or group."""
+    cid = _cid(request)
+    store.require_cycle(cid)
+    return ok(groups.analyse(store.items(cid), service.ppn(), service.thresholds()["group_spread"]))
+
+
+@handler
 async def benchmark_matches(request: Request) -> Response:
     cid = _cid(request)
     store.require_cycle(cid)
@@ -475,6 +483,7 @@ def routes() -> list[Route]:
         Route("/api/admin/nego/benchmarks", benchmark_upload, methods=["POST"]),
         Route("/api/admin/nego/cycles/{cid}/benchmarks/match", benchmark_match, methods=["POST"]),
         Route("/api/nego/cycles/{cid}/benchmarks", benchmark_matches),
+        Route("/api/nego/cycles/{cid}/groups", cycle_groups),
         Route("/api/admin/nego/cycles/{cid}/benchmarks/{mid:int}", benchmark_decide, methods=["POST"]),
         Route("/api/nego/cycles/{cid}/co-plan", co_plan),
         Route("/api/admin/nego/cycles/{cid}/co", co_apply, methods=["POST"]),

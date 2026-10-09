@@ -23,10 +23,11 @@ function renderHeader() {
   const u = shell.user;
   $("apptabs").hidden = !u;
   $("who").hidden = !u;
-  $("admin-tab").hidden = !(u && u.role === "admin");
+  $("admin-tab").hidden = !(u && (u.role === "admin" || u.role === "negotiator"));
+  $("admin-tab").textContent = u && u.role === "negotiator" ? "Master data" : "Admin";
   if (u) {
     $("who-name").textContent = u.name;
-    $("who-role").textContent = u.role === "admin" ? "Admin" : "Viewer";
+    $("who-role").textContent = { admin: "Administrator", negotiator: "Negotiator" }[u.role] || "Viewer";
     $("who-initials").textContent = initials(u.name);
   }
 }
@@ -50,7 +51,8 @@ async function route() {
     location.hash = "#signin";
     return;
   }
-  if (page === "admin" && shell.user.role !== "admin") { location.hash = "#chat"; return; }
+  if (page === "admin" && shell.user.role === "negotiator" && rest[0] !== "master") { location.hash = "#admin/master"; return; }  // read-only master data
+  if (page === "admin" && !["admin", "negotiator"].includes(shell.user.role)) { location.hash = "#chat"; return; }
   if (page === "signin" && shell.user) { location.hash = "#chat"; return; }
   if (page === "setpw") setpwEnter(rest[0] || "");
   PAGES.forEach((p) => { $(p).hidden = p !== page; });
