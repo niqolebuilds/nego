@@ -14,7 +14,7 @@ const T = {
   id: {
     portal: "Portal Principal Siloam", loading: "Memuat…",
     invalid_t: "Tautan tidak berlaku", invalid_p: "Tautan ini sudah kedaluwarsa atau dicabut. Minta tautan baru ke tim pengadaan Siloam.",
-    step_of: (n) => `Langkah ${n} dari 6`, your_task: "Tugas Anda",
+    step_of: (n) => `Langkah ${n} dari 6`, your_task: "Tugas Anda", how: "Cara mengisi", fill_rfq_s: "Isi semua = MOU", fill_fb1_s: "Terima semua", next_todo_s: "Berikutnya ›",
     steps: { identification: "Konfirmasi data item", rfq: "Isi harga penawaran (RFQ)", feedback1: "Tanggapi counter offer Siloam", submission: "Kirim dokumen perusahaan" },
     last_step: "Langkah terakhir", doc_required: "Wajib", doc_optional: "Opsional", doc_upload: "Unggah", doc_uploaded: "Terunggah", doc_delete: "Hapus",
     doc_note: "Dokumen disimpan terenkripsi dan hanya bisa dibuka tim pengadaan Siloam. PDF, JPG, PNG, DOCX, XLSX atau ZIP, maksimal 15 MB per file.",
@@ -57,7 +57,7 @@ const T = {
   en: {
     portal: "Siloam Principal Portal", loading: "Loading…",
     invalid_t: "Link not valid", invalid_p: "This link has expired or was revoked. Ask Siloam's procurement team for a new one.",
-    step_of: (n) => `Step ${n} of 6`, your_task: "Your task",
+    step_of: (n) => `Step ${n} of 6`, your_task: "Your task", how: "How to fill in", fill_rfq_s: "Fill all = MOU", fill_fb1_s: "Accept all", next_todo_s: "Next ›",
     steps: { identification: "Confirm item details", rfq: "Quote your prices (RFQ)", feedback1: "Respond to Siloam's counter offer", submission: "Send company documents" },
     last_step: "Last step", doc_required: "Required", doc_optional: "Optional", doc_upload: "Upload", doc_uploaded: "Uploaded", doc_delete: "Delete",
     doc_note: "Documents are stored encrypted and only Siloam's procurement team can open them. PDF, JPG, PNG, DOCX, XLSX or ZIP, up to 15 MB each.",
@@ -191,7 +191,8 @@ function render() {
       el("p", { text: sent ? t("sent_p", fmtDate(sent.at)) : t("waiting_p") })));
     return;
   }
-  const howto = el("ol", { class: "howto" }, t(`howto.${me.step}`).map((s) => el("li", { text: s })));
+  const howtoList = el("ol", { class: "howto" }, t(`howto.${me.step}`).map((s) => el("li", { text: s })));
+  const howto = window.innerWidth < 700 ? el("details", { class: "howto-d" }, el("summary", { text: t("how") }), howtoList) : howtoList;
   const prog = el("div", { class: "prog" }, el("div", { class: "bar" }, el("i", { id: "prog-fill" })), el("span", { id: "prog-text" }));
   const sendbar = el("div", { class: "sendbar" }, prog,
     el("button", { type: "button", class: "pbtn primary big", text: t("send"), onclick: openSummary }));
@@ -220,11 +221,12 @@ function toolbar() {
   const views = el("div", { class: "seg", role: "group" },
     VIEWS().map((v) => el("button", { type: "button", "aria-pressed": String(P.view === v), text: t(`view_${v}`),
       onclick: () => { P.view = v; try { localStorage.setItem("nego-p-view", v); } catch (_) { /* ignore */ } P.one = 0; renderList(); document.querySelectorAll(".seg button").forEach((b, i) => b.setAttribute("aria-pressed", String(VIEWS()[i] === v))); } })));
+  const both = (long, short) => [el("span", { class: "lg", text: long }), el("span", { class: "sm", text: short })];
   const bulk = P.me.step === "identification" ? null :
-    el("button", { type: "button", class: "pbtn ghost", text: t(P.me.step === "rfq" ? "fill_rfq" : "fill_fb1"), onclick: bulkFill });
+    el("button", { type: "button", class: "pbtn ghost", onclick: bulkFill }, both(t(P.me.step === "rfq" ? "fill_rfq" : "fill_fb1"), t(P.me.step === "rfq" ? "fill_rfq_s" : "fill_fb1_s")));
   return el("section", { class: "toolbar" }, chips,
-    el("div", { class: "tools" }, search, views, bulk,
-      el("button", { type: "button", class: "pbtn ghost", text: t("next_todo"), onclick: nextTodo })));
+    el("div", { class: "tools" }, search, views, el("div", { class: "toolbtns" }, bulk,
+      el("button", { type: "button", class: "pbtn ghost", onclick: nextTodo }, both(t("next_todo"), t("next_todo_s"))))));
 }
 
 function renderChips() {
@@ -493,8 +495,9 @@ function rfqBody(body, it, a) {
   const ref = el("div", { class: "ref" },
     el("span", { class: "lbl", text: t("mou_now") }),
     it.mou_hna != null ? el("span", {}, `${it.mou_qty ? `${pack} ${num(it.mou_qty)} pcs · ` : ""}HNA ${rp(it.mou_hna)} · ${t("disc")} ${pctTxt(it.mou_disc || 0)} → `, el("b", { text: `${rp(it.mou_unit_price)}/pcs` })) : el("span", { class: "muted", text: "—" }),
-    it.mou_hna != null && it.item_status !== "Discontinue" ? el("button", { type: "button", class: "pbtn small", text: t("same_mou"),
-      onclick: () => { save(a, it, { rfq_qty: it.mou_qty ?? 1, rfq_hna: String(it.mou_hna).replace(".", ","), rfq_disc: String(+((it.mou_disc || 0) * 100).toFixed(4)).replace(".", ","), ...(it.item_status ? {} : { item_status: "Active" }) }, true); } }) : null);
+    it.mou_hna != null && it.item_status !== "Discontinue" ? el("button", { type: "button", class: "pbtn small",
+      onclick: () => { save(a, it, { rfq_qty: it.mou_qty ?? 1, rfq_hna: String(it.mou_hna).replace(".", ","), rfq_disc: String(+((it.mou_disc || 0) * 100).toFixed(4)).replace(".", ","), ...(it.item_status ? {} : { item_status: "Active" }) }, true); } },
+      el("span", { class: "lg", text: t("same_mou") }), el("span", { class: "sm", text: "= MOU" })) : null);
   put(body, ref, statusButtons(a, it));
   if (it.item_status === "Discontinue") return;
   const qty = el("input", { inputmode: "numeric", value: it.rfq_qty != null ? String(it.rfq_qty) : null, "aria-label": t("qty", pack) });

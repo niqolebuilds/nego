@@ -179,3 +179,62 @@ ul.left li { display: flex; justify-content: space-between; gap: 8px; align-item
 @media (max-width: 700px) { .sendbar { padding: 8px 12px; gap: 10px; } .sendbar .prog { flex-direction: column; align-items: stretch; gap: 4px; } .pbtn.big { padding: 8px 14px; } }
 @media (max-width: 700px) { .pbar { gap: 8px; padding: 10px 12px; } .ptitle b { font-size: 16px; } #helpbtn { min-height: 40px; } .lang button { padding: 6px 10px; } }
 @media (max-width: 700px) { .sendbar .prog { min-width: 0; } .sendbar #prog-text { white-space: normal; font-size: 14px; line-height: 1.2; } .pbtn.big { font-size: 16px; padding: 8px 14px; flex: none; } }
+
+/* Phones: compact. Fewer stacked blocks, smaller type, two columns where a number fits. */
+.lg { display: inline; } .sm { display: none; }
+.howto-d { margin: 6px 0 0; } .howto-d summary { font-weight: 700; color: var(--link); cursor: pointer; padding: 6px 0; }
+@media (max-width: 700px) {
+  body.portal { font-size: 16px; }
+  .lg { display: none; } .sm { display: inline; }
+  .pbar { padding: 6px 10px; gap: 8px; }
+  .pbar .mark { width: 24px; height: 24px; }
+  .ptitle b { font-size: 14px; } .ptitle span { font-size: 13px; }
+  #helpbtn { min-height: 34px; padding: 2px 12px; font-size: 14px; }
+  .lang button { padding: 4px 9px; font-size: 13px; }
+  .pmain { padding: 8px 10px 84px; gap: 8px; }
+  .pcard { padding: 12px 14px; border-radius: 14px; }
+  .pcard h1 { font-size: 18px; margin: 0 0 2px; }
+  .eyebrow { font-size: 11px; }
+  .stepcard .muted { font-size: 13px; margin: 2px 0; }
+  .excelrow { margin-top: 6px; padding-top: 8px; gap: 8px; flex-wrap: nowrap; }
+  .excelrow .muted { display: none; }
+  .excelrow .pbtn { flex: 1; min-height: 40px; padding: 4px 8px; font-size: 14px; }
+  .pbtn { min-height: 42px; padding: 6px 12px; }
+  .pbtn.small { min-height: 34px; }
+  .toolbar { padding: 2px 0; gap: 6px; }
+  .chip { min-height: 34px; padding: 2px 11px; font-size: 14px; }
+  .tools { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+  .psearch { min-height: 40px; font-size: 15px; flex: none; }
+  .seg button { min-height: 40px; padding: 4px 10px; font-size: 13px; }
+  .toolbtns { grid-column: 1 / -1; display: flex; gap: 6px; }
+  .toolbtns .pbtn { flex: 1; min-height: 38px; padding: 2px 6px; font-size: 14px; background: var(--surface-1); border: 1.5px solid var(--border); }
+  .sku { padding: 10px 12px; border-radius: 14px; }
+  .sku-head h2 { font-size: 15px; line-height: 1.25; }
+  .sku-head .meta { font-size: 12px; margin-top: 1px; }
+  .state { font-size: 11.5px; padding: 2px 8px; }
+  .sku-body { gap: 8px; margin-top: 6px; }
+  .ref { padding: 6px 10px; font-size: 13px; gap: 2px 8px; }
+  .ref .lbl { display: none; }
+  .ref .pbtn { width: auto; margin-left: auto; min-height: 32px; }
+  .lbl { font-size: 12px; }
+  .grid3 { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 > .field:first-child { grid-column: 1 / -1; }
+  .sku input:not([type=checkbox]):not([type=file]), .sku select { min-height: 42px; font-size: 16px; padding: 4px 10px; }
+  .status .seg.big button { min-height: 38px; padding: 4px 12px; font-size: 14px; }
+  .result { padding: 4px 10px; gap: 2px 10px; }
+  .result b { font-size: 17px; }
+  .savestate { min-height: 0; margin-top: 2px; font-size: 12px; }
+  .issues { margin-top: 4px; gap: 4px; } .issue { padding: 6px 10px; } .issue p { font-size: 13px; }
+  .onenav { margin-top: 6px; } .onenav .pbtn { min-height: 40px; }
+  .sendbar { padding: 6px 10px; gap: 10px; }
+  .pbtn.big { min-height: 44px; font-size: 15px; padding: 6px 14px; }
+  .sendbar #prog-text { font-size: 12.5px; }
+  .prog .bar { height: 8px; }
+}
+@media (max-width: 700px) {
+  .ptitle b { display: none; } .ptitle span { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+  .sku-head .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 62vw; }
+  .status .lbl { display: none; }
+  .status .seg.big { width: 100%; } .status .seg.big button { flex: 1; }
+  .ref { flex-wrap: nowrap; align-items: center; } .ref > span:not(.lbl) { flex: 1; min-width: 0; }
+}
